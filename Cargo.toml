@@ -1,0 +1,9 @@
+[package]
+name = "xv6fs"
+version = "0.1.0"
+authors = ["foreverbell <dql.foreverbell@gmail.com>"]
+
+[dependencies]
+fuse = "0.3"
+libc = "*"
+time = "*"
