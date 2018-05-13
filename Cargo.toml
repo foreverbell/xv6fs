@@ -7,3 +7,4 @@ authors = ["foreverbell <dql.foreverbell@gmail.com>"]
 fuse = "0.3"
 libc = "*"
 time = "*"
+lazy_static = "1.0"
