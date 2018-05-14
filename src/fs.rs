@@ -3,13 +3,13 @@ use std::mem::size_of;
 
 #[repr(C)]
 pub struct SuperBlock {
-  size: u32,
-  nblocks: u32,
-  ninodes: u32,
-  nlog: u32,
-  log_start: u32,
-  inode_start: u32,
-  bmap_start: u32,
+  pub size: u32,
+  pub nblocks: u32,
+  pub ninodes: u32,
+  pub nlog: u32,
+  pub log_start: u32,
+  pub inode_start: u32,
+  pub bmap_start: u32,
 }
 
 pub const NDIRECT: usize = 12;
@@ -26,26 +26,26 @@ pub enum FileType {
 
 #[repr(C)]
 pub struct DiskInode {
-  file_type: FileType,
-  unused1: u16,
-  unused2: u16,
-  nlink: u16,
-  size: u32,
-  addrs: [u32; NDIRECT + 1],
+  pub file_type: FileType,
+  pub unused1: u16,
+  pub unused2: u16,
+  pub nlink: u16,
+  pub size: u32,
+  pub addrs: [u32; NDIRECT + 1],
 }
 
 pub const LOGSIZE: usize = 32;
 
 #[repr(C)]
 pub struct LogBlock {
-  n: u32,
-  blocks: [u32; LOGSIZE],
+  pub n: u32,
+  pub blocks: [u32; LOGSIZE],
 }
 
 pub const DIRSIZE: usize = 14;
 
 #[repr(C)]
 pub struct Dirent {
-  inum: u16,
-  name: [u8; DIRSIZE],
+  pub inum: u16,
+  pub name: [u8; DIRSIZE],
 }

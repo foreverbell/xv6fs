@@ -1,23 +1,9 @@
-use std::convert::AsMut;
-
-// https://stackoverflow.com/questions/37678698/function-to-build-a-fixed-sized-array-from-slice
-pub fn make_array<A, T>(slice: &[T]) -> A
-where
-  A: Sized + Default + AsMut<[T]>,
-  T: Copy,
-{
-  let mut a = Default::default();
-  // The type cannot be inferred!
-  // a.as_mut().copy_from_slice(slice);
-  <A as AsMut<[T]>>::as_mut(&mut a).copy_from_slice(slice);
-  a
-}
-
 macro_rules! from_block {
   ($block:expr, $T:ty) => ({
     const SIZE: usize = ::std::mem::size_of::<$T>();
-    let data: [u8; SIZE] = $crate::utils::cast::make_array(&$block[0..SIZE]);
+    let mut data: [u8; SIZE] = [0; SIZE];
 
+    data.copy_from_slice(&$block[0..SIZE]);
     unsafe {
       ::std::mem::transmute::<[u8; SIZE], $T>(data)
     }
