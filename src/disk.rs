@@ -30,6 +30,7 @@ pub struct DiskService {
 }
 
 lazy_static! {
+  // TODO: delegate the mutex to channel.
   pub static ref DISK: Mutex<DiskService> = Mutex::new(DiskService {
     channel: None
   });
