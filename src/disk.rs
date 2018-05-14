@@ -46,12 +46,12 @@ impl Disk {
     Disk { blocks }
   }
 
-  pub fn load<P: AsRef<Path>>(path: P) -> Self {
+  pub fn load<P: AsRef<Path>>(_path: P) -> Self {
     // TODO: load from path.
     unimplemented!();
   }
 
-  pub fn save<P: AsRef<Path>>(path: P) {
+  pub fn save<P: AsRef<Path>>(_path: P) {
     unimplemented!();
   }
 

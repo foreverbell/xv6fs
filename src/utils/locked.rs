@@ -9,14 +9,14 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct LockedItem<'a, T: 'a + ?Sized> {
   x: MutexGuard<'a, T>,
-  rc: Arc<Mutex<T>>,
+  _rc: Arc<Mutex<T>>,
 }
 
 impl<'a, T: ?Sized> LockedItem<'a, T> {
   pub fn new(x: Arc<Mutex<T>>) -> Self {
     unsafe {
       LockedItem {
-        rc: x.clone(),
+        _rc: x.clone(),
         x: (*Arc::into_raw(x)).lock().unwrap(),
       }
     }
