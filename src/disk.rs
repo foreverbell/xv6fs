@@ -67,7 +67,9 @@ impl Disk {
 // TODO: use Result instead of assert.
 impl DiskService {
   pub fn mount(&mut self, mut disk: Disk) {
-    assert!(self.channel.is_none());
+    if self.channel.is_some() {
+      self.unmount();
+    }
 
     let (send, recv) = mpsc::channel();
     self.channel = Some(send.clone());
@@ -137,16 +139,21 @@ impl DiskService {
   }
 }
 
-#[test]
-fn test() {
-  let disk = Disk::new(2);
-  let mut serv = DISK.lock().unwrap();
+#[cfg(test)]
+mod test {
+  use disk::{Disk, Block, DISK, BSIZE};
 
-  serv.mount(disk);
+  #[test]
+  fn test() {
+    let disk = Disk::new(2);
+    let mut serv = DISK.lock().unwrap();
 
-  let blk1: Block = [42; BSIZE];
-  serv.write(1, &blk1);
+    serv.mount(disk);
 
-  assert!(serv.read(0)[0] == 0);
-  assert!(serv.read(1)[0] == 42);
+    let blk1: Block = [42; BSIZE];
+    serv.write(1, &blk1);
+
+    assert!(serv.read(0)[0] == 0);
+    assert!(serv.read(1)[0] == 42);
+  }
 }

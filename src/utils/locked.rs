@@ -9,15 +9,16 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 pub struct LockedItem<'a, T: 'a + ?Sized> {
   x: MutexGuard<'a, T>,
-  _rc: Arc<Mutex<T>>,
+  ptr: *const Mutex<T>,
 }
 
 impl<'a, T: ?Sized> LockedItem<'a, T> {
   pub fn new(x: Arc<Mutex<T>>) -> Self {
     unsafe {
+      let ptr = Arc::into_raw(x);
       LockedItem {
-        _rc: x.clone(),
-        x: (*Arc::into_raw(x)).lock().unwrap(),
+        ptr: ptr,
+        x: (*ptr).lock().unwrap(),
       }
     }
   }
@@ -33,5 +34,13 @@ impl<'a, T: ?Sized> Deref for LockedItem<'a, T> {
 impl<'a, T: ?Sized> DerefMut for LockedItem<'a, T> {
   fn deref_mut(&mut self) -> &mut T {
     &mut self.x
+  }
+}
+
+impl<'a, T: ?Sized> Drop for LockedItem<'a, T> {
+  fn drop(&mut self) {
+    unsafe {
+      let _rc = Arc::from_raw(self.ptr);
+    }
   }
 }

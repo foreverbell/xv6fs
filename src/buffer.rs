@@ -45,6 +45,14 @@ impl Cache {
     }
   }
 
+  pub fn capacity(&self) -> usize {
+    self.capacity
+  }
+
+  pub fn nitems(&self) -> usize {
+    self.cache.lock().unwrap().len()
+  }
+
   pub fn get<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {
     let mut buf: Option<Arc<Mutex<Buf>>>;
 
@@ -57,7 +65,7 @@ impl Cache {
           let mut unused_blockno = None;
 
           for (blockno2, buf2) in cache.iter() {
-            if Arc::strong_count(&buf2) == 1 {
+            if Arc::strong_count(buf2) == 1 {
               if !buf2.lock().unwrap().flags.contains(BufFlags::DIRTY) {
                 unused_blockno = Some(*blockno2);
                 break;
@@ -66,7 +74,7 @@ impl Cache {
           }
 
           match unused_blockno {
-            Some(blockno) => cache.remove(&blockno),
+            Some(blockno2) => cache.remove(&blockno2),
             None => return None,
           };
         }
@@ -92,5 +100,45 @@ impl Cache {
   pub fn write<'a>(&self, buf: &mut LockedBuf<'a>) {
     DISK.lock().unwrap().write(buf.blockno, &buf.data);
     buf.flags.remove(BufFlags::DIRTY);
+  }
+}
+
+#[cfg(test)]
+mod test {
+  use buffer::{BCACHE, BufFlags};
+  use disk::{Disk, DISK};
+
+  #[test]
+  fn test1() {
+    let disk = Disk::new(1024);
+    let mut serv = DISK.lock().unwrap();
+
+    serv.mount(disk);
+
+    for i in 0..256 {
+      assert!(BCACHE.get(i).is_some());
+    }
+    assert!(BCACHE.nitems() == 256);
+    // A stale entry is evicted.
+    assert!(BCACHE.get(300).is_some());
+    assert!(BCACHE.nitems() == 256);
+  }
+
+  #[test]
+  fn test2() {
+    let disk = Disk::new(1024);
+    let mut serv = DISK.lock().unwrap();
+
+    serv.mount(disk);
+
+    for i in 0..256 {
+      let b = BCACHE.get(i);
+      assert!(b.is_some());
+      // Mark every newly-inserted cache entry as inevictable.
+      b.unwrap().flags.insert(BufFlags::DIRTY);
+    }
+    assert!(BCACHE.nitems() == 256);
+    // Cache is full, we cannot insert any new entries.
+    assert!(BCACHE.get(300).is_none());
   }
 }
