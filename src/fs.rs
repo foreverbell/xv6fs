@@ -34,12 +34,12 @@ pub struct DiskInode {
   pub addrs: [u32; NDIRECT + 1],
 }
 
-pub const LOGSIZE: usize = 32;
+pub const LOGSIZE: usize = 64;
 
 #[repr(C)]
-pub struct LogBlock {
+pub struct LogHeader {
   pub n: u32,
-  pub blocks: [u32; LOGSIZE],
+  pub blocks: [u32; LOGSIZE], // blocks[i] <-> sb.log_start + i + 1
 }
 
 pub const DIRSIZE: usize = 14;

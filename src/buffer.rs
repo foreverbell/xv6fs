@@ -11,9 +11,9 @@ bitflags! {
 }
 
 pub struct Buf {
-  blockno: usize,
-  flags: BufFlags,
+  pub blockno: usize,
   pub data: Block,
+  flags: BufFlags,
 }
 
 pub type LockedBuf<'a> = LockedItem<'a, Buf>;
@@ -34,6 +34,11 @@ impl Buf {
       flags: BufFlags::empty(),
       data: [0; BSIZE],
     }
+  }
+
+  // Pins this buf in cache.
+  pub fn pin(&mut self) {
+    self.flags.insert(BufFlags::DIRTY);
   }
 }
 
