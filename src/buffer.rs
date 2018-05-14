@@ -1,7 +1,7 @@
 use disk::{BSIZE, Block, DISK};
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, MutexGuard};
-use std::ops::{Deref, DerefMut};
+use std::sync::{Arc, Mutex};
+use utils::locked::LockedItem;
 
 bitflags! {
   struct BufFlags: u32 {
@@ -16,11 +16,7 @@ pub struct Buf {
   pub data: Block,
 }
 
-// TODO: refactor this so similar pattern can be used for inode.
-pub struct LockedBuf<'a> {
-  buf: MutexGuard<'a, Buf>,
-  rc: Arc<Mutex<Buf>>,
-}
+pub type LockedBuf<'a> = LockedItem<'a, Buf>;
 
 pub struct Cache {
   capacity: usize,
@@ -38,30 +34,6 @@ impl Buf {
       flags: BufFlags::empty(),
       data: [0; BSIZE],
     }
-  }
-}
-
-impl<'a> LockedBuf<'a> {
-  fn new(buf: Arc<Mutex<Buf>>) -> Self {
-    unsafe {
-      LockedBuf {
-        rc: buf.clone(),
-        buf: (*Arc::into_raw(buf)).lock().unwrap(),
-      }
-    }
-  }
-}
-
-impl<'a> Deref for LockedBuf<'a> {
-  type Target = Buf;
-  fn deref(&self) -> &Buf {
-    &*self.buf
-  }
-}
-
-impl<'a> DerefMut for LockedBuf<'a> {
-  fn deref_mut(&mut self) -> &mut Buf {
-    &mut self.buf
   }
 }
 
