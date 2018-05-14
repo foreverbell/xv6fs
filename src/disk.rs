@@ -8,7 +8,7 @@ pub const BSIZE: usize = 512;
 
 pub type Block = [u8; BSIZE];
 
-struct Disk {
+pub struct Disk {
   blocks: Vec<Block>,
 }
 
@@ -25,12 +25,12 @@ enum Request {
   Exit { reply: mpsc::Sender<Disk> },
 }
 
-struct DiskService {
+pub struct DiskService {
   channel: Option<mpsc::Sender<Request>>,
 }
 
 lazy_static! {
-  static ref DISK: Mutex<DiskService> = Mutex::new(DiskService {
+  pub static ref DISK: Mutex<DiskService> = Mutex::new(DiskService {
     channel: None
   });
 }
