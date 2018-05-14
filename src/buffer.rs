@@ -45,6 +45,10 @@ impl Cache {
     }
   }
 
+  pub fn init(&self) {
+    self.cache.lock().unwrap().clear();
+  }
+
   pub fn capacity(&self) -> usize {
     self.capacity
   }
@@ -114,6 +118,7 @@ mod test {
     let mut serv = DISK.lock().unwrap();
 
     serv.mount(disk);
+    BCACHE.init();
 
     for i in 0..256 {
       assert!(BCACHE.get(i).is_some());
@@ -130,12 +135,34 @@ mod test {
     let mut serv = DISK.lock().unwrap();
 
     serv.mount(disk);
+    BCACHE.init();
 
     for i in 0..256 {
       let b = BCACHE.get(i);
       assert!(b.is_some());
       // Mark every newly-inserted cache entry as inevictable.
       b.unwrap().flags.insert(BufFlags::DIRTY);
+    }
+    assert!(BCACHE.nitems() == 256);
+    // Cache is full, we cannot insert any new entries.
+    assert!(BCACHE.get(300).is_none());
+  }
+
+
+  #[test]
+  fn test3() {
+    let disk = Disk::new(1024);
+    let mut serv = DISK.lock().unwrap();
+
+    serv.mount(disk);
+    BCACHE.init();
+
+    let mut vec = vec![];
+
+    for i in 0..256 {
+      let b = BCACHE.get(i);
+      assert!(b.is_some());
+      vec.push(b.unwrap());
     }
     assert!(BCACHE.nitems() == 256);
     // Cache is full, we cannot insert any new entries.
