@@ -30,13 +30,13 @@ impl SuperBlock {
   }
 }
 
-// Number of direct blocks of an inode. 
+// Number of direct blocks of an inode.
 pub const NDIRECT: usize = 12;
 
-// Number of indirect blocks of an inode. 
+// Number of indirect blocks of an inode.
 pub const NINDIRECT: usize = BSIZE / size_of::<u32>();
 
-// Number of blocks of an inode. 
+// Number of blocks of an inode.
 pub const NIBLOCKS: usize = NDIRECT + NINDIRECT;
 
 // Inode index of root folder.

@@ -2,7 +2,7 @@ use disk::{BSIZE, Block, DISK};
 use fs::SuperBlock;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use utils::locked::LockedItem;
+use util::locked::LockedItem;
 
 bitflags! {
   struct BufFlags: u32 {
@@ -131,14 +131,13 @@ mod test {
   #[test]
   fn test1() {
     let disk = Disk::new(1024);
-    let mut serv = DISK.lock().unwrap();
-
-    serv.mount(disk);
+    DISK.lock().unwrap().mount(disk);
     BCACHE.init();
 
     for i in 0..256 {
       assert!(BCACHE.get(i).is_some());
     }
+    println!("{}", BCACHE.nitems());
     assert!(BCACHE.nitems() == 256);
     // A stale entry is evicted.
     assert!(BCACHE.get(300).is_some());
@@ -148,9 +147,7 @@ mod test {
   #[test]
   fn test2() {
     let disk = Disk::new(1024);
-    let mut serv = DISK.lock().unwrap();
-
-    serv.mount(disk);
+    DISK.lock().unwrap().mount(disk);
     BCACHE.init();
 
     for i in 0..256 {
@@ -168,9 +165,7 @@ mod test {
   #[test]
   fn test3() {
     let disk = Disk::new(1024);
-    let mut serv = DISK.lock().unwrap();
-
-    serv.mount(disk);
+    DISK.lock().unwrap().mount(disk);
     BCACHE.init();
 
     let mut vec = vec![];
@@ -178,10 +173,43 @@ mod test {
     for i in 0..256 {
       let b = BCACHE.get(i);
       assert!(b.is_some());
+      // Store a reference at somewhere else to prevent this block from
+      // evicting.
       vec.push(b.unwrap());
     }
     assert!(BCACHE.nitems() == 256);
     // Cache is full, we cannot insert any new entries.
     assert!(BCACHE.get(300).is_none());
+  }
+
+  #[test]
+  fn test4() {
+    let disk = Disk::new(1024);
+    DISK.lock().unwrap().mount(disk);
+    BCACHE.init();
+
+    {
+      let mut b = BCACHE.read(1000).unwrap();
+      assert!(b.data[0] == 0);
+      b.data[0] = 42;
+      BCACHE.write(&mut b);
+    }
+
+    {
+      let b = BCACHE.get(1000).unwrap();
+      // The data still exists in memory even if we only `get` it.
+      assert!(b.data[0] == 42);
+    }
+
+    {
+      for i in 0..255 {
+        BCACHE.pin(&mut BCACHE.get(i).unwrap());
+      }
+      BCACHE.get(255).unwrap();
+
+      let b = BCACHE.get(1000).unwrap();
+      // Data is lost because block 1000 is evicted.
+      assert!(b.data[0] == 0);
+    }
   }
 }

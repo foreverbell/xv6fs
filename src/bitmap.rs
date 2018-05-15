@@ -18,7 +18,7 @@ impl Bitmap {
     let sb = BCACHE.sb();
     let nblocks = sb.nblocks as usize;
 
-    for b in 0..nblocks/BPB {
+    for b in 0..nblocks / BPB {
       let mut block = txn.read(sb.bblock(b * BPB)).unwrap();
 
       for j in 0..BPB {
