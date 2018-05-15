@@ -2,7 +2,7 @@ use disk::{BSIZE, Block, DISK};
 use fs::SuperBlock;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use util::locked::LockedItem;
+use util::locked::{LockedItem, UnlockedItem};
 
 bitflags! {
   struct BufFlags: u32 {
@@ -21,7 +21,7 @@ pub type LockedBuf<'a> = LockedItem<'a, Buf>;
 
 pub struct Cache {
   capacity: usize,
-  cache: Mutex<HashMap<usize, Arc<Mutex<Buf>>>>,
+  cache: Mutex<HashMap<usize, UnlockedItem<Buf>>>,
 }
 
 lazy_static! {
@@ -69,12 +69,14 @@ impl Cache {
   }
 
   pub fn get<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {
-    let mut buf: Option<Arc<Mutex<Buf>>>;
+    let mut buf: Option<UnlockedItem<Buf>>;
 
     {
       let mut cache = self.cache.lock().unwrap();
 
-      buf = cache.get_mut(&blockno).map(|buf| buf.clone());
+      buf = cache.get_mut(&blockno).map(
+        |buf| UnlockedItem::new(buf.clone()),
+      );
       if buf.is_none() {
         while cache.len() >= self.capacity {
           let mut unused_blockno = None;
@@ -94,12 +96,13 @@ impl Cache {
           };
         }
 
-        buf = Some(Arc::new(Mutex::new(Buf::new(blockno))));
-        cache.insert(blockno, buf.as_mut().unwrap().clone());
+        let new_buf = Arc::new(Mutex::new(Buf::new(blockno)));
+        buf = Some(UnlockedItem::new(new_buf.clone()));
+        cache.insert(blockno, UnlockedItem::new(new_buf.clone()));
       }
     }
 
-    buf.map(|buf| LockedBuf::new(buf))
+    buf.map(|buf| buf.acquire())
   }
 
   pub fn read<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {

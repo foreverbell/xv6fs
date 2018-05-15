@@ -26,3 +26,7 @@ mod logging;
 #[allow(dead_code)]
 #[allow(unused_must_use)]
 mod bitmap;
+
+#[allow(dead_code)]
+#[allow(unused_must_use)]
+mod inode;
