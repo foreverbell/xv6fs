@@ -21,4 +21,4 @@ mod buffer;
 
 #[allow(dead_code)]
 
-mod log;
+mod logging;

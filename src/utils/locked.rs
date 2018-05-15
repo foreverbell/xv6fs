@@ -1,8 +1,10 @@
-/// `LockedItem` is to track a locked item in a container with every item
-/// is protected by a individual lock, e.g. `HashMap<usize, Arc<Mutex<T>>>`.
+/// `LockedItem` is to track a locked item in a container with every
+/// item is protected by a individual lock, e.g. `HashMap<usize,
+/// Arc<Mutex<T>>>`.
 ///
-/// Every `LockedItem` represents an exclusively locked item in this container.
-/// `Arc` guarantees this item can outlive the host container.
+/// Every `LockedItem` represents an exclusively locked item in this
+/// container. `Arc` guarantees this item can outlive the host
+/// container.
 
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};

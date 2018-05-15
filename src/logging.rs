@@ -4,7 +4,10 @@ use fs::{ROOTINO, LOGSIZE, LogHeader, SuperBlock};
 use std::mem::size_of;
 use std::sync::{Mutex, Condvar};
 
-// We define LOGSIZE as 64 in fs.rs, thus allow maximum 4 concurrent txns.
+// TODO: failpoint testing.
+
+// We define LOGSIZE as 64 in fs.rs, thus allow maximum 4
+// concurrent txns.
 const MAXOPBLOCKS: usize = 16;
 
 struct LogState {
@@ -12,7 +15,7 @@ struct LogState {
   outstanding: usize,
 }
 
-struct Log {
+struct Logging {
   start: usize,
   size: usize,
   state: Mutex<LogState>,
@@ -21,16 +24,12 @@ struct Log {
 }
 
 struct Transaction<'a> {
-  log: &'a Log,
+  logging: &'a Logging,
 }
 
-fn read_super_block() -> SuperBlock {
-  from_block!(&BCACHE.read(ROOTINO).unwrap().data, SuperBlock)
-}
-
-impl Log {
+impl Logging {
   fn new() -> Self {
-    Log {
+    Logging {
       start: 0,
       size: 0,
       state: Mutex::new(LogState {
@@ -48,7 +47,8 @@ impl Log {
   pub fn init(&mut self) {
     assert!(size_of::<LogHeader>() <= BSIZE);
 
-    let super_block = read_super_block();
+    let super_block =
+      from_block!(&BCACHE.read(ROOTINO).unwrap().data, SuperBlock);
 
     self.start = super_block.log_start as usize;
     self.size = super_block.nlog as usize;
@@ -113,19 +113,21 @@ impl Log {
   }
 }
 
+// RAII transaction, which acts as a proxy for block cache read and
+// write.
 impl<'a> Transaction<'a> {
-  fn new(log: &'a Log) -> Self {
-    Transaction { log: log }
+  fn new(logging: &'a Logging) -> Self {
+    Transaction { logging }
   }
 
   fn begin_txn(&self) {
-    let mut state = self.log.state.lock().unwrap();
+    let mut state = self.logging.state.lock().unwrap();
 
     loop {
       if state.committing {
-        state = self.log.condvar.wait(state).unwrap();
-      } else if (state.outstanding + 1) * MAXOPBLOCKS > self.log.size {
-        state = self.log.condvar.wait(state).unwrap();
+        state = self.logging.condvar.wait(state).unwrap();
+      } else if (state.outstanding + 1) * MAXOPBLOCKS > self.logging.size {
+        state = self.logging.condvar.wait(state).unwrap();
       } else {
         state.outstanding += 1;
         break;
@@ -134,7 +136,7 @@ impl<'a> Transaction<'a> {
   }
 
   fn end_txn(&self) {
-    let mut state = self.log.state.lock().unwrap();
+    let mut state = self.logging.state.lock().unwrap();
     let mut do_commit = false;
 
     assert!(state.outstanding > 0);
@@ -146,34 +148,38 @@ impl<'a> Transaction<'a> {
       state.committing = true;
       do_commit = true;
     } else {
-      self.log.condvar.notify_all();
+      self.logging.condvar.notify_all();
     }
 
     drop(state);
 
     if do_commit {
       self.commit();
-      self.log.state.lock().unwrap().committing = false;
-      self.log.condvar.notify_all();
+      self.logging.state.lock().unwrap().committing = false;
+      self.logging.condvar.notify_all();
     }
   }
 
   fn commit(&self) {
-    let mut lh = self.log.lh.lock().unwrap();
+    let mut lh = self.logging.lh.lock().unwrap();
 
     if lh.n > 0 {
-      self.log.write_log(&lh);
-      self.log.write_head(&lh); // commit point
-      self.log.install_txn(&lh);
+      self.logging.write_log(&lh);
+      self.logging.write_head(&lh); // commit point
+      self.logging.install_txn(&lh);
       lh.n = 0;
-      self.log.write_head(&lh);
+      self.logging.write_head(&lh);
     }
   }
 
-  pub fn write<'b>(&self, buf: &mut LockedBuf<'b>) {
-    let mut lh = self.log.lh.lock().unwrap();
+  pub fn read<'b>(&self, blockno: usize) -> Option<LockedBuf<'a>> {
+    BCACHE.read(blockno)
+  }
 
-    if lh.n as usize >= self.log.size - 1 {
+  pub fn write<'b>(&self, buf: &mut LockedBuf<'b>) {
+    let mut lh = self.logging.lh.lock().unwrap();
+
+    if lh.n as usize >= self.logging.size - 1 {
       panic!("too big transaction");
     }
 
@@ -189,7 +195,7 @@ impl<'a> Transaction<'a> {
       lh.n += 1;
     }
     lh.blocks[lh_index.unwrap()] = buf.blockno as u32;
-    buf.pin();
+    BCACHE.pin(buf);
   }
 }
 

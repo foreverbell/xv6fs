@@ -20,6 +20,7 @@ pub const ROOTINO: usize = 1;
 
 #[repr(u16)]
 pub enum FileType {
+  None,
   Directory,
   File,
 }

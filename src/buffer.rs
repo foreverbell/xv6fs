@@ -35,11 +35,6 @@ impl Buf {
       data: [0; BSIZE],
     }
   }
-
-  // Pins this buf in cache.
-  pub fn pin(&mut self) {
-    self.flags.insert(BufFlags::DIRTY);
-  }
 }
 
 impl Cache {
@@ -109,6 +104,11 @@ impl Cache {
   pub fn write<'a>(&self, buf: &mut LockedBuf<'a>) {
     DISK.lock().unwrap().write(buf.blockno, &buf.data);
     buf.flags.remove(BufFlags::DIRTY);
+  }
+
+  // Pins this buf in cache.
+  pub fn pin<'a>(&self, buf: &mut LockedBuf<'a>) {
+    buf.flags.insert(BufFlags::DIRTY);
   }
 }
 
