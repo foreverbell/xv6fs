@@ -20,5 +20,9 @@ mod fs;
 mod buffer;
 
 #[allow(dead_code)]
-
+#[allow(unused_must_use)]
 mod logging;
+
+#[allow(dead_code)]
+#[allow(unused_must_use)]
+mod bitmap;

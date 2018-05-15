@@ -3,19 +3,43 @@ use std::mem::size_of;
 
 #[repr(C)]
 pub struct SuperBlock {
-  pub size: u32,
-  pub nblocks: u32,
-  pub ninodes: u32,
-  pub nlog: u32,
-  pub log_start: u32,
-  pub inode_start: u32,
-  pub bmap_start: u32,
+  pub nblocks: u32, // Number of blocks (size of file system image)
+  pub unused: u32,
+  pub ninodes: u32, // Number of inodes
+  pub nlogs: u32, // Number of log blocks
+  pub log_start: u32, // Block number of first log block
+  pub inode_start: u32, // Block number of first inode block
+  pub bmap_start: u32, // Block number of first free map block
 }
 
-pub const NDIRECT: usize = 12;
-pub const NINDIRECT: usize = BSIZE / size_of::<u32>();
-pub const MAXFILE: usize = NDIRECT + NINDIRECT;
+// Number of bitmap bits per block.
+pub const BPB: usize = BSIZE * 8;
 
+// Number of inodes per block.
+pub const IPB: usize = BSIZE / size_of::<DiskInode>();
+
+impl SuperBlock {
+  // Block of free map containing bit for block `blockno`.
+  pub fn bblock(&self, blockno: usize) -> usize {
+    self.bmap_start as usize + blockno / BPB
+  }
+
+  // Block containing inode `inodeno`.
+  pub fn iblock(&self, inodeno: usize) -> usize {
+    self.inode_start as usize + inodeno / IPB
+  }
+}
+
+// Number of direct blocks of an inode. 
+pub const NDIRECT: usize = 12;
+
+// Number of indirect blocks of an inode. 
+pub const NINDIRECT: usize = BSIZE / size_of::<u32>();
+
+// Number of blocks of an inode. 
+pub const NIBLOCKS: usize = NDIRECT + NINDIRECT;
+
+// Inode index of root folder.
 pub const ROOTINO: usize = 1;
 
 #[repr(u16)]
@@ -35,6 +59,7 @@ pub struct DiskInode {
   pub addrs: [u32; NDIRECT + 1],
 }
 
+// Maximum number of log entries.
 pub const LOGSIZE: usize = 64;
 
 #[repr(C)]
@@ -43,6 +68,7 @@ pub struct LogHeader {
   pub blocks: [u32; LOGSIZE], // blocks[i] <-> sb.log_start + i + 1
 }
 
+// Maximum length of directory name.
 pub const DIRSIZE: usize = 14;
 
 #[repr(C)]

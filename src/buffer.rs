@@ -1,4 +1,5 @@
 use disk::{BSIZE, Block, DISK};
+use fs::SuperBlock;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use utils::locked::LockedItem;
@@ -25,6 +26,12 @@ pub struct Cache {
 
 lazy_static! {
   pub static ref BCACHE: Cache = Cache::new(256);
+
+  // Block 1 is immutable after file system is created, so we can safely
+  // store it here.
+  static ref SB: SuperBlock = from_block!(
+    &DISK.lock().unwrap().read(1), SuperBlock
+  );
 }
 
 impl Buf {
@@ -55,6 +62,10 @@ impl Cache {
 
   pub fn nitems(&self) -> usize {
     self.cache.lock().unwrap().len()
+  }
+
+  pub fn sb(&self) -> &SuperBlock {
+    &SB
   }
 
   pub fn get<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {

@@ -1,6 +1,6 @@
 use buffer::{BCACHE, LockedBuf};
 use disk::BSIZE;
-use fs::{ROOTINO, LOGSIZE, LogHeader, SuperBlock};
+use fs::{LOGSIZE, LogHeader};
 use std::mem::size_of;
 use std::sync::{Mutex, Condvar};
 
@@ -15,7 +15,7 @@ struct LogState {
   outstanding: usize,
 }
 
-struct Logging {
+pub struct Logging {
   start: usize,
   size: usize,
   state: Mutex<LogState>,
@@ -23,7 +23,7 @@ struct Logging {
   lh: Mutex<LogHeader>,
 }
 
-struct Transaction<'a> {
+pub struct Transaction<'a> {
   logging: &'a Logging,
 }
 
@@ -47,11 +47,10 @@ impl Logging {
   pub fn init(&mut self) {
     assert!(size_of::<LogHeader>() <= BSIZE);
 
-    let super_block =
-      from_block!(&BCACHE.read(ROOTINO).unwrap().data, SuperBlock);
+    let sb = BCACHE.sb();
 
-    self.start = super_block.log_start as usize;
-    self.size = super_block.nlog as usize;
+    self.start = sb.log_start as usize;
+    self.size = sb.nlogs as usize;
 
     assert!(self.size <= LOGSIZE);
 
@@ -195,6 +194,8 @@ impl<'a> Transaction<'a> {
       lh.n += 1;
     }
     lh.blocks[lh_index.unwrap()] = buf.blockno as u32;
+
+    // Pin this buffer to cache to avoid being evicted.
     BCACHE.pin(buf);
   }
 }
