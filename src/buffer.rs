@@ -12,16 +12,16 @@ bitflags! {
 }
 
 pub struct Buf {
-  pub blockno: usize,
   pub data: Block,
   flags: BufFlags,
 }
 
-pub type LockedBuf<'a> = LockedItem<'a, Buf>;
+pub type LockedBuf<'a> = LockedItem<'a, Buf, usize /* blockno */>;
+pub type UnlockedBuf = UnlockedItem<Buf, usize /* blockno */>;
 
 pub struct Cache {
   capacity: usize,
-  cache: Mutex<HashMap<usize, UnlockedItem<Buf>>>,
+  cache: Mutex<HashMap<usize, UnlockedBuf>>,
 }
 
 lazy_static! {
@@ -35,9 +35,8 @@ lazy_static! {
 }
 
 impl Buf {
-  fn new(blockno: usize) -> Self {
+  fn new() -> Self {
     Buf {
-      blockno: blockno,
       flags: BufFlags::empty(),
       data: [0; BSIZE],
     }
@@ -48,7 +47,7 @@ impl Cache {
   fn new(capacity: usize) -> Self {
     Cache {
       capacity: capacity,
-      cache: Mutex::new(HashMap::new()),
+      cache: Mutex::new(HashMap::with_capacity(capacity)),
     }
   }
 
@@ -68,45 +67,43 @@ impl Cache {
     &SB
   }
 
-  pub fn get<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {
-    let mut buf: Option<UnlockedItem<Buf>>;
+  pub fn get(&self, blockno: usize) -> Option<UnlockedBuf> {
+    let mut buf: Option<UnlockedBuf>;
 
-    {
-      let mut cache = self.cache.lock().unwrap();
+    let mut cache = self.cache.lock().unwrap();
 
-      buf = cache.get_mut(&blockno).map(
-        |buf| UnlockedItem::new(buf.clone()),
-      );
-      if buf.is_none() {
-        while cache.len() >= self.capacity {
-          let mut unused_blockno = None;
+    buf = cache.get_mut(&blockno).map(
+      |buf| UnlockedItem::new(buf.clone(), buf.no),
+    );
+    if buf.is_none() {
+      while cache.len() >= self.capacity {
+        let mut unused_blockno = None;
 
-          for (blockno2, buf2) in cache.iter() {
-            if Arc::strong_count(buf2) == 1 {
-              if !buf2.lock().unwrap().flags.contains(BufFlags::DIRTY) {
-                unused_blockno = Some(*blockno2);
-                break;
-              }
+        for (blockno2, buf2) in cache.iter() {
+          if Arc::strong_count(buf2) == 1 {
+            if !buf2.lock().unwrap().flags.contains(BufFlags::DIRTY) {
+              unused_blockno = Some(*blockno2);
+              break;
             }
           }
-
-          match unused_blockno {
-            Some(blockno2) => cache.remove(&blockno2),
-            None => return None,
-          };
         }
 
-        let new_buf = Arc::new(Mutex::new(Buf::new(blockno)));
-        buf = Some(UnlockedItem::new(new_buf.clone()));
-        cache.insert(blockno, UnlockedItem::new(new_buf.clone()));
+        match unused_blockno {
+          Some(blockno2) => cache.remove(&blockno2),
+          None => return None,
+        };
       }
+
+      let new_buf = Arc::new(Mutex::new(Buf::new()));
+      buf = Some(UnlockedItem::new(new_buf.clone(), blockno));
+      cache.insert(blockno, UnlockedItem::new(new_buf.clone(), blockno));
     }
 
-    buf.map(|buf| buf.acquire())
+    buf
   }
 
   pub fn read<'a>(&self, blockno: usize) -> Option<LockedBuf<'a>> {
-    let mut buf = self.get(blockno)?;
+    let mut buf = self.get(blockno)?.acquire();
 
     if !buf.flags.contains(BufFlags::VALID) {
       buf.data = DISK.lock().unwrap().read(blockno);
@@ -116,7 +113,7 @@ impl Cache {
   }
 
   pub fn write<'a>(&self, buf: &mut LockedBuf<'a>) {
-    DISK.lock().unwrap().write(buf.blockno, &buf.data);
+    DISK.lock().unwrap().write(buf.no, &buf.data);
     buf.flags.remove(BufFlags::DIRTY);
   }
 
