@@ -24,7 +24,9 @@ pub struct UnlockedItem<T: ?Sized, U: Copy> {
 // We have a chance to do some clean-ups here before `UnlockedItem`
 // is getting dropped.
 impl<T: ?Sized, U: Copy> UnlockedDrop for UnlockedItem<T, U> {
-  default fn drop(&mut self) { () }
+  default fn drop(&mut self) {
+    ()
+  }
 }
 
 pub struct LockedItem<'a, T: 'a + ?Sized, U: Copy> {
@@ -48,6 +50,12 @@ impl<T: ?Sized, U: Copy> UnlockedItem<T, U> {
         no: self.no,
       }
     }
+  }
+
+  // Returns the reference count of this unlocked item.
+  // Notice the reference storing in the container is excluded.
+  pub fn refcnt(&self) -> usize {
+    Arc::strong_count(self) - 1
   }
 }
 

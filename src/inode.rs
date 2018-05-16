@@ -4,7 +4,7 @@ use fs::{DiskInode, FileType, IPB, ROOTINO};
 use logging::Transaction;
 use std::collections::HashMap;
 use std::mem::transmute;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use util::locked::{LockedItem, UnlockedItem, UnlockedDrop};
 
 pub struct Inode {
@@ -87,18 +87,67 @@ impl Cache {
   }
 
   pub fn get(&self, inodeno: usize) -> Option<UnlockedInode> {
+    let mut inode: Option<UnlockedInode>;
     let mut cache = self.cache.lock().unwrap();
 
-    unimplemented!();
+    inode = cache.get_mut(&inodeno).map(|inode| {
+      UnlockedInode::new(inode.clone(), inode.no)
+    });
+    if inode.is_none() {
+      if cache.len() >= self.capacity {
+        let mut free_nos = vec![];
+
+        for (inodeno2, inode2) in cache.iter() {
+          if inode2.refcnt() == 0 {
+            free_nos.push(*inodeno2);
+          }
+        }
+        if free_nos.is_empty() {
+          return None;
+        }
+        for inodeno2 in free_nos {
+          cache.remove(&inodeno2);
+        }
+      }
+
+      let new_inode = Arc::new(Mutex::new(Inode::new()));
+      inode = Some(UnlockedInode::new(new_inode.clone(), inodeno));
+      cache.insert(inodeno, UnlockedInode::new(new_inode.clone(), inodeno));
+    }
+    inode
   }
 
-  pub fn lock<'a>(&self, inode: &UnlockedInode) -> LockedInode<'a> {
-    unimplemented!();
+  pub fn lock<'a, 'b>(
+    &self,
+    txn: &Transaction<'a>,
+    inode: &UnlockedInode,
+  ) -> LockedInode<'b> {
+    let mut inode = inode.acquire();
+    let sb = BCACHE.sb();
+
+    if inode.inode.is_some() {
+      return inode;
+    }
+    let buf = txn.read(sb.iblock(inode.no)).unwrap();
+    let inodes: [DiskInode; IPB] = unsafe { transmute::<Block, _>(buf.data) };
+
+    assert!(inodes[inode.no % IPB].file_type != FileType::None);
+
+    inode.inode = Some(inodes[inode.no % IPB]);
+    inode
   }
 }
 
 impl UnlockedDrop for UnlockedInode {
   fn drop(&mut self) {
-    unimplemented!();
+    if self.refcnt() == 0 {
+      return;
+    }
+    let inode = self.acquire(); // acquiring lock here is expensive?
+    if let Some(inode) = inode.inode {
+      if inode.nlink == 0 {
+        // truncate file
+      }
+    }
   }
 }

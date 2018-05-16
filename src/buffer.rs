@@ -2,7 +2,7 @@ use disk::{BSIZE, Block, DISK};
 use fs::SuperBlock;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use util::locked::{LockedItem, UnlockedItem, UnlockedDrop};
+use util::locked::{LockedItem, UnlockedItem};
 
 bitflags! {
   struct BufFlags: u32 {
@@ -72,31 +72,34 @@ impl Cache {
     let mut cache = self.cache.lock().unwrap();
 
     buf = cache.get_mut(&blockno).map(|buf| {
-      UnlockedItem::new(buf.clone(), buf.no)
+      UnlockedBuf::new(buf.clone(), buf.no)
     });
     if buf.is_none() {
-      while cache.len() >= self.capacity {
-        let mut unused_blockno = None;
+      if cache.len() >= self.capacity {
+        let mut free_nos = vec![];
 
         for (blockno2, buf2) in cache.iter() {
-          if Arc::strong_count(buf2) == 1 {
+          if buf2.refcnt() == 0 {
             if !buf2.lock().unwrap().flags.contains(BufFlags::DIRTY) {
-              unused_blockno = Some(*blockno2);
-              break;
+              free_nos.push(*blockno2);
+              if cache.len() - free_nos.len() < self.capacity {
+                break;
+              }
             }
           }
         }
-        match unused_blockno {
-          Some(blockno2) => cache.remove(&blockno2),
-          None => return None,
-        };
+        if free_nos.is_empty() {
+          return None;
+        }
+        for blockno2 in free_nos {
+          cache.remove(&blockno2);
+        }
       }
 
       let new_buf = Arc::new(Mutex::new(Buf::new()));
-      buf = Some(UnlockedItem::new(new_buf.clone(), blockno));
-      cache.insert(blockno, UnlockedItem::new(new_buf.clone(), blockno));
+      buf = Some(UnlockedBuf::new(new_buf.clone(), blockno));
+      cache.insert(blockno, UnlockedBuf::new(new_buf.clone(), blockno));
     }
-
     buf
   }
 

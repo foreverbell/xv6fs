@@ -36,8 +36,8 @@ pub const NDIRECT: usize = 12;
 // Number of indirect blocks of an inode.
 pub const NINDIRECT: usize = BSIZE / size_of::<u32>();
 
-// Number of blocks of an inode.
-pub const NIBLOCKS: usize = NDIRECT + NINDIRECT;
+// Maximum file size.
+pub const MAXFILESIZE: usize = (NDIRECT + NINDIRECT) * BSIZE;
 
 // Inode index of root folder.
 pub const ROOTINO: usize = 1;
