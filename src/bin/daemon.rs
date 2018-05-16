@@ -1,129 +1,103 @@
 extern crate fuse;
 extern crate libc;
 extern crate time;
+extern crate xv6fs;
+extern crate threadpool;
 
-use std::env;
-use std::ffi::OsStr;
-use libc::ENOENT;
-use time::Timespec;
 use fuse::{FileType, FileAttr, Filesystem, Request, ReplyData, ReplyEntry,
            ReplyAttr, ReplyDirectory};
+use std::ffi::OsStr;
+use threadpool::ThreadPool;
+use time::Timespec;
+use xv6fs::fs::{DIRSIZE, DiskInode};
+use xv6fs::fs;
+use xv6fs::inode::{ICACHE, Inode};
+use xv6fs::logging::LOGGING;
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
 
-const CREATE_TIME: Timespec = Timespec {
-  sec: 1381237736,
-  nsec: 0,
-}; // 2013-10-08 08:56
+// xv6fs does not support file time stamp, use a dummy one.
+const DEFAULT_TIME: Timespec = Timespec { sec: 42, nsec: 42 };
 
-const HELLO_DIR_ATTR: FileAttr = FileAttr {
-  ino: 1,
-  size: 0,
-  blocks: 0,
-  atime: CREATE_TIME,
-  mtime: CREATE_TIME,
-  ctime: CREATE_TIME,
-  crtime: CREATE_TIME,
-  kind: FileType::Directory,
-  perm: 0o755,
-  nlink: 1,
-  uid: 0,
-  gid: 0,
-  rdev: 0,
-  flags: 0,
-};
+fn str2u8(s: &OsStr) -> Option<[u8; DIRSIZE]> {
+  let s_bytes = s.to_str()?.as_bytes();
+  if s_bytes.len() > DIRSIZE {
+    return None;
+  }
 
-const HELLO_TXT_CONTENT: &'static str = "Hello World!\n";
+  let mut result: [u8; DIRSIZE] = [0; DIRSIZE];
+  for i in 0..s_bytes.len() {
+    result[i] = s_bytes[i];
+  }
+  Some(result)
+}
 
-const HELLO_TXT_ATTR: FileAttr = FileAttr {
-  ino: 2,
-  size: 13,
-  blocks: 1,
-  atime: CREATE_TIME,
-  mtime: CREATE_TIME,
-  ctime: CREATE_TIME,
-  crtime: CREATE_TIME,
-  kind: FileType::RegularFile,
-  perm: 0o644,
-  nlink: 1,
-  uid: 0,
-  gid: 0,
-  rdev: 0,
-  flags: 0,
-};
+fn get_perm(inode: &DiskInode) -> u16 {
+  match inode.file_type {
+    fs::FileType::None => {
+      panic!("invalid file type");
+    },
+    fs::FileType::Directory => 0o644,
+    fs::FileType::File => 0o755,
+  }
+}
 
-struct HelloFS;
+fn get_kind(inode: &DiskInode) -> FileType {
+  match inode.file_type {
+    fs::FileType::None => {
+      panic!("invalid file type");
+    },
+    fs::FileType::Directory => FileType::Directory,
+    fs::FileType::File => FileType::RegularFile,
+  }
+}
 
-impl Filesystem for HelloFS {
+struct Xv6FS {
+  pool: ThreadPool,
+}
+
+impl Xv6FS {
+  fn new(nworkers: usize) -> Self {
+    Xv6FS { pool: ThreadPool::new(nworkers) }
+  }
+}
+
+impl Filesystem for Xv6FS {
   fn lookup(
     &mut self,
-    _req: &Request,
+    req: &Request,
     parent: u64,
     name: &OsStr,
     reply: ReplyEntry,
   ) {
-    if parent == 1 && name.to_str() == Some("hello.txt") {
-      reply.entry(&TTL, &HELLO_TXT_ATTR, 0);
-    } else {
-      reply.error(ENOENT);
-    }
-  }
+    let name = str2u8(name).unwrap();
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let mut pinode = ICACHE.get(parent as usize).unwrap().acquire();
+      let inode = pinode.dlookup(&txn, &name).unwrap().acquire();
+      let inodeno = inode.no;
+      let inode = inode.inode.unwrap();
 
-  fn getattr(&mut self, _req: &Request, ino: u64, reply: ReplyAttr) {
-    match ino {
-      1 => reply.attr(&TTL, &HELLO_DIR_ATTR),
-      2 => reply.attr(&TTL, &HELLO_TXT_ATTR),
-      _ => reply.error(ENOENT),
-    }
-  }
-
-  fn read(
-    &mut self,
-    _req: &Request,
-    ino: u64,
-    _fh: u64,
-    offset: i64,
-    _size: u32,
-    reply: ReplyData,
-  ) {
-    if ino == 2 {
-      reply.data(&HELLO_TXT_CONTENT.as_bytes()[offset as usize..]);
-    } else {
-      reply.error(ENOENT);
-    }
-  }
-
-  fn readdir(
-    &mut self,
-    _req: &Request,
-    ino: u64,
-    _fh: u64,
-    offset: i64,
-    mut reply: ReplyDirectory,
-  ) {
-    if ino == 1 {
-      if offset == 0 {
-        reply.add(1, 0, FileType::Directory, ".");
-        reply.add(1, 1, FileType::Directory, "..");
-        reply.add(2, 2, FileType::RegularFile, "hello.txt");
-      }
-      reply.ok();
-    } else {
-      reply.error(ENOENT);
-    }
+      let attr = FileAttr {
+        ino: inodeno as u64,
+        size: inode.size as u64,
+        blocks: 1,
+        atime: DEFAULT_TIME,
+        mtime: DEFAULT_TIME,
+        ctime: DEFAULT_TIME,
+        crtime: DEFAULT_TIME,
+        kind: get_kind(&inode),
+        perm: get_perm(&inode),
+        nlink: inode.nlink as u32,
+        uid: 0,
+        gid: 0,
+        rdev: 0,
+        flags: 0,
+      };
+    });
   }
 }
 
 fn main() {
-  println!("Hello, world!");
-
-  let mountpoint = env::args_os().nth(1).unwrap();
-  let options = ["-o", "ro"]
-    .iter()
-    .map(|o| o.as_ref())
-    .collect::<Vec<&OsStr>>();
-  match fuse::mount(HelloFS, &mountpoint, &options) {
-    Ok(_) => (),
-    Err(e) => println!("{}", e),
-  }
+  println!("Hello World!");
 }

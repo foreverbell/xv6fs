@@ -242,6 +242,10 @@ impl Cache {
     }
   }
 
+  pub fn init(&self) {
+    self.cache.lock().unwrap().clear();
+  }
+
   pub fn capacity(&self) -> usize {
     self.capacity
   }

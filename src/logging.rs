@@ -28,11 +28,20 @@ pub struct Transaction<'a> {
   logging: &'a Logging,
 }
 
+lazy_static! {
+  pub static ref LOGGING: Logging = Logging::new();
+}
+
 impl Logging {
   fn new() -> Self {
+    let sb = BCACHE.sb();
+
+    assert!(size_of::<LogHeader>() <= BSIZE);
+    assert!(sb.nlogs as usize <= LOGSIZE);
+
     Logging {
-      start: 0,
-      size: 0,
+      start: sb.log_start as usize,
+      size: sb.nlogs as usize,
       state: Mutex::new(LogState {
         committing: false,
         outstanding: 0,
@@ -45,16 +54,15 @@ impl Logging {
     }
   }
 
-  pub fn init(&mut self) {
-    assert!(size_of::<LogHeader>() <= BSIZE);
-
-    let sb = BCACHE.sb();
-
-    self.start = sb.log_start as usize;
-    self.size = sb.nlogs as usize;
-
-    assert!(self.size <= LOGSIZE);
-
+  pub fn init(&self) {
+    *self.state.lock().unwrap() = LogState {
+      committing: false,
+      outstanding: 0,
+    };
+    *self.lh.lock().unwrap() = LogHeader {
+      n: 0,
+      blocks: [0; LOGSIZE],
+    };
     self.recover();
   }
 

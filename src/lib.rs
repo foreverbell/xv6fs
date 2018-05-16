@@ -15,7 +15,7 @@ mod disk;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
-mod fs;
+pub mod fs;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
@@ -23,7 +23,7 @@ mod buffer;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
-mod logging;
+pub mod logging;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
@@ -31,4 +31,4 @@ mod bitmap;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
-mod inode;
+pub mod inode;

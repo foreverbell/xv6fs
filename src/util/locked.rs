@@ -55,7 +55,16 @@ impl<T: ?Sized, U: Copy> UnlockedItem<T, U> {
   // Returns the reference count of this unlocked item.
   // Notice the reference storing in the container is excluded.
   pub fn refcnt(&self) -> usize {
-    Arc::strong_count(self) - 1
+    Arc::strong_count(&self.x) - 1
+  }
+
+  pub fn disassemble(self) -> (*const Mutex<T>, U) {
+    let ptr = Arc::into_raw(self.x.clone());
+    (ptr, self.no)
+  }
+
+  pub fn assemble(ptr: *const Mutex<T>, no: U) -> Self {
+    unsafe { UnlockedItem::new(Arc::from_raw(ptr), no) }
   }
 }
 
