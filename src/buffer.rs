@@ -2,7 +2,7 @@ use disk::{BSIZE, Block, DISK};
 use fs::SuperBlock;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use util::locked::{LockedItem, UnlockedItem};
+use util::locked::{LockedItem, UnlockedItem, UnlockedDrop};
 
 bitflags! {
   struct BufFlags: u32 {
@@ -69,12 +69,11 @@ impl Cache {
 
   pub fn get(&self, blockno: usize) -> Option<UnlockedBuf> {
     let mut buf: Option<UnlockedBuf>;
-
     let mut cache = self.cache.lock().unwrap();
 
-    buf = cache.get_mut(&blockno).map(
-      |buf| UnlockedItem::new(buf.clone(), buf.no),
-    );
+    buf = cache.get_mut(&blockno).map(|buf| {
+      UnlockedItem::new(buf.clone(), buf.no)
+    });
     if buf.is_none() {
       while cache.len() >= self.capacity {
         let mut unused_blockno = None;
@@ -87,7 +86,6 @@ impl Cache {
             }
           }
         }
-
         match unused_blockno {
           Some(blockno2) => cache.remove(&blockno2),
           None => return None,
@@ -154,7 +152,7 @@ mod test {
       let b = BCACHE.get(i);
       assert!(b.is_some());
       // Mark every newly-inserted cache entry as inevictable.
-      b.unwrap().flags.insert(BufFlags::DIRTY);
+      b.unwrap().acquire().flags.insert(BufFlags::DIRTY);
     }
     assert!(BCACHE.nitems() == 256);
     // Cache is full, we cannot insert any new entries.
@@ -198,18 +196,18 @@ mod test {
     {
       let b = BCACHE.get(1000).unwrap();
       // The data still exists in memory even if we only `get` it.
-      assert!(b.data[0] == 42);
+      assert!(b.acquire().data[0] == 42);
     }
 
     {
       for i in 0..255 {
-        BCACHE.pin(&mut BCACHE.get(i).unwrap());
+        BCACHE.pin(&mut BCACHE.get(i).unwrap().acquire());
       }
       BCACHE.get(255).unwrap();
 
       let b = BCACHE.get(1000).unwrap();
       // Data is lost because block 1000 is evicted.
-      assert!(b.data[0] == 0);
+      assert!(b.acquire().data[0] == 0);
     }
   }
 }

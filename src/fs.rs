@@ -43,6 +43,7 @@ pub const NIBLOCKS: usize = NDIRECT + NINDIRECT;
 pub const ROOTINO: usize = 1;
 
 #[repr(u16)]
+#[derive(PartialEq, Eq, Clone, Copy)]
 pub enum FileType {
   None,
   Directory,
@@ -50,6 +51,7 @@ pub enum FileType {
 }
 
 #[repr(C)]
+#[derive(Clone, Copy)]
 pub struct DiskInode {
   pub file_type: FileType,
   pub unused1: u16,
@@ -57,6 +59,19 @@ pub struct DiskInode {
   pub nlink: u16,
   pub size: u32,
   pub addrs: [u32; NDIRECT + 1],
+}
+
+impl DiskInode {
+  pub fn init(&mut self, file_type: FileType) {
+    self.file_type = file_type;
+    self.unused1 = 0;
+    self.unused2 = 0;
+    self.nlink = 0;
+    self.size = 0;
+    for i in 0..(NDIRECT + 1) {
+      self.addrs[i] = 0;
+    }
+  }
 }
 
 // Maximum number of log entries.
