@@ -6,4 +6,7 @@ build:
 test:
 	RUST_TEST_THREADS=1 cargo +nightly test
 
-.PHONY: build test
+clean:
+	rm -r target
+
+.PHONY: build test clean

@@ -3,7 +3,7 @@ use disk::BSIZE;
 use fs::BPB;
 use logging::Transaction;
 
-struct Bitmap;
+pub struct Bitmap;
 
 impl Bitmap {
   // Zero `blockno`.
@@ -14,7 +14,7 @@ impl Bitmap {
     txn.write(&mut block);
   }
 
-  pub fn alloc<'a>(txn: &Transaction<'a>) -> Option<usize> {
+  pub fn alloc<'a>(txn: &Transaction<'a>) -> usize {
     let sb = BCACHE.sb();
     let nblocks = sb.nblocks as usize;
 
@@ -31,11 +31,11 @@ impl Bitmap {
           block.data[j / 8] |= mask;
           txn.write(&mut block);
           Bitmap::zero(txn, i);
-          return Some(i);
+          return i;
         }
       }
     }
-    None
+    panic!("no free block");
   }
 
   pub fn free<'a>(txn: &Transaction<'a>, blockno: usize) {

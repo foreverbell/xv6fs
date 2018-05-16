@@ -91,3 +91,6 @@ pub struct Dirent {
   pub inum: u16,
   pub name: [u8; DIRSIZE],
 }
+
+// Number of directories per block.
+pub const DPB: usize = BSIZE / size_of::<Dirent>();

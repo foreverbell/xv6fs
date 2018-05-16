@@ -23,6 +23,7 @@ pub struct Logging {
   lh: Mutex<LogHeader>,
 }
 
+// TODO: nested transaction.
 pub struct Transaction<'a> {
   logging: &'a Logging,
 }
@@ -195,7 +196,7 @@ impl<'a> Transaction<'a> {
     }
     lh.blocks[lh_index.unwrap()] = buf.no as u32;
 
-    // Pin this buffer to cache to avoid being evicted.
+    // Pin this buffer in cache to avoid being evicted.
     BCACHE.pin(buf);
   }
 }
