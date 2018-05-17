@@ -107,7 +107,7 @@ impl Filesystem for Xv6FS {
         self.pool.execute(move || {
           let txn = LOGGING.new_txn();
           let mut pinode = get_inode(parent).acquire();
-          let inode = pinode.dlookup(&txn, &name).unwrap();
+          let inode = pinode.as_directory().lookup(&txn, &name).unwrap();
           let disk_inode = inode.acquire().inode.unwrap();
           let attr = create_attr(inode.disassemble() as u64, &disk_inode);
 

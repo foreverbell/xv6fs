@@ -7,7 +7,7 @@ extern crate lazy_static;
 extern crate bitflags;
 
 #[macro_use]
-mod util;
+pub mod util;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]

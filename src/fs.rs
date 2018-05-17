@@ -5,7 +5,7 @@ use std::mem::size_of;
 pub struct SuperBlock {
   pub nblocks: u32, // Number of blocks (size of file system image)
   pub unused: u32,
-  pub ninodes: u32, // Number of inodes
+  pub ninodes: u32, // Number of inodes (not inode blocks!)
   pub nlogs: u32, // Number of log blocks
   pub log_start: u32, // Block number of first log block
   pub inode_start: u32, // Block number of first inode block

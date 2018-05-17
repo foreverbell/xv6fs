@@ -15,6 +15,10 @@ pub struct Inode {
   pub no: usize,
 }
 
+pub struct Directory<'a> {
+  inode: &'a mut Inode,
+}
+
 pub type LockedInode<'a> = LockedItem<'a, Inode, usize /* inodeno */>;
 pub type UnlockedInode = UnlockedItem<Inode, usize /* inodeno */>;
 
@@ -30,6 +34,14 @@ lazy_static! {
 impl Inode {
   fn new(no: usize) -> Self {
     Inode { inode: None, no }
+  }
+
+  pub fn as_directory<'a>(&'a mut self) -> Directory<'a> {
+    assert!(
+      self.inode.is_some() &&
+        self.inode.unwrap().file_type == FileType::Directory
+    );
+    Directory { inode: self }
   }
 
   pub fn update<'a>(&self, txn: &Transaction<'a>) {
@@ -151,20 +163,54 @@ impl Inode {
     }
     Some(written)
   }
+}
 
-  pub fn dlookup<'a>(
+impl<'a> Directory<'a> {
+  fn inode(&self) -> DiskInode {
+    self.inode.inode.unwrap()
+  }
+
+  pub fn enumerate<'b>(&mut self, txn: &Transaction<'b>) -> Vec<UnlockedInode> {
+    let inode = self.inode();
+    let nentries = inode.size as usize / size_of::<Dirent>();
+    let mut result = vec![];
+    let mut cur_index = 0;
+
+    while cur_index < nentries {
+      let m = min((nentries - cur_index) * size_of::<Dirent>(), BSIZE);
+      let buf = self
+        .inode
+        .read(txn, cur_index * size_of::<Dirent>(), m)
+        .unwrap();
+
+      assert!(buf.len() == m);
+      assert!(m % size_of::<Dirent>() == 0);
+
+      for i in 0..(m / size_of::<Dirent>()) {
+        let ent: &Dirent =
+          unsafe { &*(buf.as_slice().as_ptr() as *const Dirent).add(i) };
+
+        if ent.inum != 0 {
+          result.push(ICACHE.get(ent.inum as usize).unwrap());
+        }
+      }
+      cur_index += m / size_of::<Dirent>();
+    }
+    result
+  }
+
+  pub fn lookup<'b>(
     &mut self,
-    txn: &Transaction<'a>,
+    txn: &Transaction<'b>,
     name: &[u8; DIRSIZE],
   ) -> Option<UnlockedInode> {
-    assert!(self.inode.is_some());
-    let inode = self.inode.unwrap();
+    let inode = self.inode();
     let nentries = inode.size as usize / size_of::<Dirent>();
     let mut cur_index = 0;
 
     while cur_index < nentries {
       let m = min((nentries - cur_index) * size_of::<Dirent>(), BSIZE);
-      let buf = self.read(txn, cur_index * size_of::<Dirent>(), m)?;
+      let buf = self.inode.read(txn, cur_index * size_of::<Dirent>(), m)?;
 
       assert!(buf.len() == m);
       assert!(m % size_of::<Dirent>() == 0);
@@ -182,24 +228,26 @@ impl Inode {
     None
   }
 
-  pub fn dlink<'a>(
+  pub fn link<'b>(
     &mut self,
-    txn: &Transaction<'a>,
+    txn: &Transaction<'b>,
     name: &[u8; DIRSIZE],
     inum: u16,
   ) -> bool {
-    if self.dlookup(txn, name).is_some() {
+    if self.lookup(txn, name).is_some() {
       return false;
     }
 
-    assert!(self.inode.is_some());
-    let inode = self.inode.unwrap();
+    let inode = self.inode();
     let nentries = inode.size as usize / size_of::<Dirent>();
     let mut cur_index = 0;
 
     while cur_index < nentries {
       let m = min((nentries - cur_index) * size_of::<Dirent>(), BSIZE);
-      let buf = self.read(txn, cur_index * size_of::<Dirent>(), m).unwrap();
+      let buf = self
+        .inode
+        .read(txn, cur_index * size_of::<Dirent>(), m)
+        .unwrap();
 
       assert!(buf.len() == m);
       assert!(m % size_of::<Dirent>() == 0);
@@ -229,6 +277,7 @@ impl Inode {
       })
     };
     self
+      .inode
       .write(txn, cur_index * size_of::<Dirent>(), &ent_bytes)
       .is_some()
   }

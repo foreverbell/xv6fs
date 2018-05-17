@@ -1,6 +1,7 @@
 // Creates a new object of type `T` from `block`.
 //
 // `block` should be a reference.
+#[macro_export]
 macro_rules! from_block {
   ($block:expr, $T:ty) => ({
     const SIZE: usize = ::std::mem::size_of::<$T>();
@@ -17,6 +18,7 @@ macro_rules! from_block {
 // filled with zero.
 //
 // `obj` should be a reference.
+#[macro_export]
 macro_rules! to_block {
   ($obj:expr, $T:ty) => ({
     let mut block: $crate::disk::Block = [0; $crate::disk::BSIZE];
