@@ -83,7 +83,6 @@ impl Disk {
   }
 }
 
-// TODO: use Result instead of assert.
 impl DiskService {
   pub fn mount(&mut self, mut disk: Disk) {
     if self.channel.is_some() {

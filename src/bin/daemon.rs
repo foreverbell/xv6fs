@@ -48,8 +48,8 @@ fn u82str(s_bytes: &[u8; DIRSIZE]) -> &OsStr {
 fn get_perm(inode: &DiskInode) -> u16 {
   match inode.file_type {
     fs::FileType::None => panic!("invalid file type"),
-    fs::FileType::Directory => 0o644,
-    fs::FileType::File => 0o755,
+    fs::FileType::Directory => 0o755,
+    fs::FileType::File => 0o644,
   }
 }
 
@@ -131,7 +131,7 @@ impl Filesystem for Xv6FS {
           return;
         },
       };
-      let dinode = ICACHE.lock(&txn, &inode).inode.unwrap();
+      let dinode = ICACHE.lock(&txn, &inode).inode.as_ref().unwrap().clone();
       let attr = create_attr(
         inode.disassemble() as u64,
         dinode.size as u64,
@@ -163,7 +163,12 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let dinode = ICACHE.lock(&txn, &get_inode(ino)).inode.unwrap();
+      let dinode = ICACHE
+        .lock(&txn, &get_inode(ino))
+        .inode
+        .as_ref()
+        .unwrap()
+        .clone();
       let attr = create_attr(
         ino,
         dinode.size as u64,
@@ -300,7 +305,7 @@ impl Filesystem for Xv6FS {
       }
 
       for (inode, name) in ents {
-        let dinode = ICACHE.lock(&txn, &inode).inode.unwrap();
+        let dinode = ICACHE.lock(&txn, &inode).inode.as_ref().unwrap().clone();
         reply.add(
           inode.disassemble() as u64,
           offset,
@@ -337,7 +342,8 @@ impl Filesystem for Xv6FS {
 
       match pinode.as_directory().lookup(&txn, &name.unwrap()) {
         Some(inode) => {
-          let dinode = ICACHE.lock(&txn, &inode).inode.unwrap();
+          let dinode =
+            ICACHE.lock(&txn, &inode).inode.as_ref().unwrap().clone();
 
           if exist_flag || dinode.file_type != fs::FileType::File {
             reply.error(EEXIST);
@@ -360,8 +366,10 @@ impl Filesystem for Xv6FS {
           let inode = ICACHE.alloc(&txn, fs::FileType::File).unwrap();
           let mut dinode = ICACHE.lock(&txn, &inode);
 
-          dinode.inode.unwrap().nlink = 1;
+          dinode.inode.as_mut().unwrap().nlink = 1;
           dinode.update(&txn);
+
+          let dinode = dinode.inode.as_ref().unwrap().clone();
 
           if !pinode.as_directory().link(
             &txn,
@@ -370,14 +378,16 @@ impl Filesystem for Xv6FS {
           )
           {
             error!("unable to link inode {} in parent {}", inode.no(), parent);
+            reply.error(EIO);
+            return;
           }
 
           let attr = create_attr(
             inode.disassemble() as u64,
-            dinode.inode.unwrap().size as u64,
-            get_kind(dinode.inode.as_ref().unwrap()),
-            get_perm(dinode.inode.as_ref().unwrap()),
-            dinode.inode.unwrap().nlink as u32,
+            dinode.size as u64,
+            get_kind(&dinode),
+            get_perm(&dinode),
+            dinode.nlink as u32,
           );
           reply.created(&TTL, &attr, 0, 0, 0);
         },

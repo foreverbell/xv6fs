@@ -51,7 +51,7 @@ pub enum FileType {
 }
 
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct DiskInode {
   pub file_type: FileType,
   pub unused1: u16,

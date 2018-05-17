@@ -39,19 +39,18 @@ impl Inode {
   pub fn as_directory<'a>(&'a mut self) -> Directory<'a> {
     assert!(
       self.inode.is_some() &&
-        self.inode.unwrap().file_type == FileType::Directory
+        self.inode.as_ref().unwrap().file_type == FileType::Directory
     );
     Directory { inode: self }
   }
 
   pub fn update<'a>(&self, txn: &Transaction<'a>) {
     assert!(self.inode.is_some());
-    let inode = self.inode.unwrap();
     let sb = BCACHE.sb();
     let mut buf = txn.read(sb.iblock(self.no)).unwrap();
     let inodes: &mut [DiskInode; IPB] = unsafe { transmute(&mut buf.data) };
 
-    inodes[self.no % IPB] = inode;
+    inodes[self.no % IPB] = self.inode.as_ref().unwrap().clone();
     txn.write(&mut buf);
   }
 
@@ -61,7 +60,7 @@ impl Inode {
     n: usize,
   ) -> Option<usize> {
     assert!(self.inode.is_some());
-    let mut inode = self.inode.unwrap();
+    let inode = self.inode.as_mut().unwrap();
 
     if n < NDIRECT {
       if inode.addrs[n] == 0 {
@@ -91,15 +90,15 @@ impl Inode {
     mut n: usize,
   ) -> Option<Vec<u8>> {
     assert!(self.inode.is_some());
-    let inode = self.inode.unwrap();
+    let inode_size = self.inode.as_ref().unwrap().size;
 
-    if offset > inode.size as usize || offset.saturating_add(n) != offset + n ||
+    if offset > inode_size as usize || offset.saturating_add(n) != offset + n ||
       offset + n > MAXFILESIZE
     {
       return None;
     }
-    if offset + n > inode.size as usize {
-      n = inode.size as usize - offset;
+    if offset + n > inode_size as usize {
+      n = inode_size as usize - offset;
     }
 
     let mut result = Vec::with_capacity(n);
@@ -130,10 +129,10 @@ impl Inode {
     data: &[u8],
   ) -> Option<usize> {
     assert!(self.inode.is_some());
-    let mut inode = self.inode.unwrap();
+    let inode_size = self.inode.as_ref().unwrap().size as usize;
     let n = data.len();
 
-    if offset > inode.size as usize || offset.saturating_add(n) != offset + n ||
+    if offset > inode_size || offset.saturating_add(n) != offset + n ||
       offset + n > MAXFILESIZE
     {
       return None;
@@ -157,8 +156,8 @@ impl Inode {
       cur_offset += m;
     }
 
-    if written > 0 && cur_offset > inode.size as usize {
-      inode.size = cur_offset as u32;
+    if written > 0 && cur_offset > inode_size as usize {
+      self.inode.as_mut().unwrap().size = cur_offset as u32;
       self.update(txn);
     }
     Some(written)
@@ -167,7 +166,7 @@ impl Inode {
 
 impl<'a> Directory<'a> {
   fn inode(&self) -> DiskInode {
-    self.inode.inode.unwrap()
+    self.inode.inode.as_ref().unwrap().clone()
   }
 
   pub fn enumerate<'b>(
@@ -372,7 +371,7 @@ impl Cache {
       return;
     }
     let inode = self.lock(txn, inode); // acquiring lock here is expensive?
-    if let Some(inode) = inode.inode {
+    if let Some(inode) = inode.inode.as_ref() {
       if inode.nlink == 0 {
         // truncate file
       }
@@ -395,7 +394,7 @@ impl Cache {
 
     assert!(inodes[inode.no % IPB].file_type != FileType::None);
 
-    inode.inode = Some(inodes[inode.no % IPB]);
+    inode.inode = Some(inodes[inode.no % IPB].clone());
     inode
   }
 }
