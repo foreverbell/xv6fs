@@ -63,7 +63,7 @@ impl Disk {
     let mut blocks = Vec::with_capacity(nblocks);
     for _ in 0..nblocks {
       let mut buf: [u8; BSIZE] = [0; BSIZE];
-      f.read(&mut buf);
+      f.read(&mut buf).unwrap();
       blocks.push(buf);
     }
 
@@ -100,7 +100,7 @@ impl DiskService {
       }
       match m.unwrap() {
         Request::Read { reply, blockno } => {
-          reply.send(*disk.read(blockno));
+          reply.send(*disk.read(blockno)).unwrap();
         },
         Request::Write {
           reply,
@@ -108,10 +108,10 @@ impl DiskService {
           data,
         } => {
           disk.write(blockno, data);
-          reply.send(());
+          reply.send(()).unwrap();
         },
         Request::Exit { reply } => {
-          reply.send(disk);
+          reply.send(disk).unwrap();
           break;
         },
       }
@@ -125,7 +125,7 @@ impl DiskService {
 
     self.channel.as_ref().unwrap().send(
       Request::Exit { reply: send },
-    );
+    ).unwrap();
     let disk = recv.recv().unwrap();
     self.channel = None;
     disk
@@ -139,7 +139,7 @@ impl DiskService {
     self.channel.as_ref().unwrap().send(Request::Read {
       reply: send,
       blockno: blockno,
-    });
+    }).unwrap();
     recv.recv().unwrap()
   }
 
@@ -152,7 +152,7 @@ impl DiskService {
       reply: send,
       blockno: blockno,
       data: *data,
-    });
+    }).unwrap();
     recv.recv().unwrap()
   }
 }

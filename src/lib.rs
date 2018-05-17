@@ -11,29 +11,12 @@ extern crate log;
 
 #[macro_use]
 pub mod util;
-
-#[allow(dead_code)]
-#[allow(unused_must_use)]
 pub mod disk;
-
-#[allow(dead_code)]
-#[allow(unused_must_use)]
 pub mod fs;
-
-#[allow(dead_code)]
-#[allow(unused_must_use)]
-mod buffer;
-
-#[allow(dead_code)]
-#[allow(unused_must_use)]
+pub mod inode;
 pub mod logging;
 
+mod buffer;
 #[allow(dead_code)]
-#[allow(unused_must_use)]
 mod bitmap;
-
-#[allow(dead_code)]
-#[allow(unused_must_use)]
-pub mod inode;
-
 mod testfs;
