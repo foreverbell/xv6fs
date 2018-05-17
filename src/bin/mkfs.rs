@@ -26,7 +26,7 @@ fn main() {
 
   // Write NBLOCKS zeroed blocks into fs image.
   for _ in 0..NBLOCKS {
-    f.write_all(&[0; BSIZE]);
+    f.write_all(&[0; BSIZE]).unwrap();
   }
 
   let ninodeblks = (NINODES / IPB + 1) as u32;
@@ -46,8 +46,8 @@ fn main() {
   let mut nfree = nmeta;
 
   // Write the super block.
-  f.seek(SeekFrom::Start(BSIZE as u64));
-  f.write_all(&to_block!(&sb, SuperBlock));
+  f.seek(SeekFrom::Start(BSIZE as u64)).unwrap();
+  f.write_all(&to_block!(&sb, SuperBlock)).unwrap();
 
   // Write the root inode and folder.
   let mut iroot = DiskInode {
@@ -66,10 +66,10 @@ fn main() {
   f.seek(SeekFrom::Start(
     (sb.inode_start as usize * BSIZE +
        size_of::<DiskInode>()) as u64,
-  ));
+  )).unwrap();
   f.write_all(unsafe {
     &transmute::<_, [u8; size_of::<DiskInode>()]>(iroot)
-  });
+  }).unwrap();
 
   let dirents: [Dirent; 2] = [
     Dirent {
@@ -81,10 +81,11 @@ fn main() {
       name: str2u8(".."),
     },
   ];
-  f.seek(SeekFrom::Start(inode_blk0 as u64 * BSIZE as u64));
+  f.seek(SeekFrom::Start(inode_blk0 as u64 * BSIZE as u64))
+    .unwrap();
   f.write_all(unsafe {
     &transmute::<_, [u8; size_of::<Dirent>() * 2]>(dirents)
-  });
+  }).unwrap();
 
   // Write bitmap.
 
@@ -95,8 +96,9 @@ fn main() {
   for i in 0..nfree as usize {
     bitmap[i / 8] |= 1 << (i % 8);
   }
-  f.seek(SeekFrom::Start(sb.bmap_start as u64 * BSIZE as u64));
-  f.write_all(&bitmap);
+  f.seek(SeekFrom::Start(sb.bmap_start as u64 * BSIZE as u64))
+    .unwrap();
+  f.write_all(&bitmap).unwrap();
 
-  f.flush();
+  f.flush().unwrap();
 }

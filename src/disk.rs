@@ -1,6 +1,7 @@
 use std::path::Path;
-use std::sync::Mutex;
-use std::sync::mpsc;
+use std::sync::{Mutex, mpsc};
+use std::fs::File;
+use std::io::Read;
 use std::thread;
 
 // Size of each block.
@@ -46,9 +47,23 @@ impl Disk {
     Disk { blocks }
   }
 
-  pub fn load<P: AsRef<Path>>(_path: P) -> Self {
-    // TODO: load from path.
-    unimplemented!();
+  pub fn load<P: AsRef<Path>>(path: P) -> Option<Self> {
+    let mut f = File::open(path).unwrap();
+    let size = f.metadata().unwrap().len() as usize;
+
+    if size % BSIZE != 0 {
+      return None;
+    }
+
+    let nblocks = size / BSIZE;
+    let mut blocks = Vec::with_capacity(nblocks);
+    for _ in 0..nblocks {
+      let mut buf: [u8; BSIZE] = [0; BSIZE];
+      f.read(&mut buf);
+      blocks.push(buf);
+    }
+
+    Some(Disk { blocks })
   }
 
   pub fn save<P: AsRef<Path>>(_path: P) {

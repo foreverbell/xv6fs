@@ -172,6 +172,8 @@ impl<'a> Transaction<'a> {
     let mut lh = self.logging.lh.lock().unwrap();
 
     if lh.n > 0 {
+      info!("committing {} blocks", lh.n);
+
       self.logging.write_log(&lh);
       self.logging.write_head(&lh); // commit point
       self.logging.install_txn(&lh);

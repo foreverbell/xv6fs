@@ -150,7 +150,7 @@ impl Inode {
       let m = min(n - written, BSIZE - from);
 
       for i in from..(from + m) {
-        buf.data[i] = data[i - from + cur_offset];
+        buf.data[i] = data[i - from + written];
       }
       txn.write(&mut buf);
       written += m;
@@ -170,7 +170,10 @@ impl<'a> Directory<'a> {
     self.inode.inode.unwrap()
   }
 
-  pub fn enumerate<'b>(&mut self, txn: &Transaction<'b>) -> Vec<UnlockedInode> {
+  pub fn enumerate<'b>(
+    &mut self,
+    txn: &Transaction<'b>,
+  ) -> Vec<(UnlockedInode, [u8; DIRSIZE])> {
     let inode = self.inode();
     let nentries = inode.size as usize / size_of::<Dirent>();
     let mut result = vec![];
@@ -191,7 +194,7 @@ impl<'a> Directory<'a> {
           unsafe { &*(buf.as_slice().as_ptr() as *const Dirent).add(i) };
 
         if ent.inum != 0 {
-          result.push(ICACHE.get(ent.inum as usize).unwrap());
+          result.push((ICACHE.get(ent.inum as usize).unwrap(), ent.name));
         }
       }
       cur_index += m / size_of::<Dirent>();
@@ -234,6 +237,8 @@ impl<'a> Directory<'a> {
     name: &[u8; DIRSIZE],
     inum: u16,
   ) -> bool {
+    assert!(inum > 0);
+
     if self.lookup(txn, name).is_some() {
       return false;
     }
@@ -279,7 +284,7 @@ impl<'a> Directory<'a> {
     self
       .inode
       .write(txn, cur_index * size_of::<Dirent>(), &ent_bytes)
-      .is_some()
+      .unwrap() == ent_bytes.len()
   }
 }
 
@@ -362,11 +367,11 @@ impl Cache {
     inode
   }
 
-  fn put(inode: &UnlockedInode) {
+  fn put<'a>(&self, txn: &Transaction<'a>, inode: &UnlockedInode) {
     if inode.refcnt() == 0 {
       return;
     }
-    let inode = inode.acquire(); // acquiring lock here is expensive?
+    let inode = self.lock(txn, inode); // acquiring lock here is expensive?
     if let Some(inode) = inode.inode {
       if inode.nlink == 0 {
         // truncate file
@@ -397,6 +402,6 @@ impl Cache {
 
 impl UnlockedDrop for UnlockedInode {
   fn drop(&mut self) {
-    Cache::put(self);
+    // Cache::put(self);
   }
 }
