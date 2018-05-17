@@ -4,12 +4,12 @@ extern crate time;
 extern crate xv6fs;
 extern crate threadpool;
 
-use fuse::{FileType, FileAttr, Filesystem, Request, ReplyData, ReplyEntry,
-           ReplyAttr, ReplyDirectory};
+use fuse::{FileType, FileAttr, Filesystem, Request, ReplyData, ReplyEntry, ReplyAttr, ReplyDirectory};
+use libc::ENOENT;
 use std::ffi::OsStr;
 use threadpool::ThreadPool;
 use time::Timespec;
-use xv6fs::fs::{DIRSIZE, DiskInode};
+use xv6fs::fs::{DIRSIZE, DiskInode, ROOTINO};
 use xv6fs::fs;
 use xv6fs::inode::{ICACHE, Inode};
 use xv6fs::logging::LOGGING;
@@ -70,31 +70,39 @@ impl Filesystem for Xv6FS {
     name: &OsStr,
     reply: ReplyEntry,
   ) {
-    let name = str2u8(name).unwrap();
-    self.pool.execute(move || {
-      let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.get(parent as usize).unwrap().acquire();
-      let inode = pinode.dlookup(&txn, &name).unwrap().acquire();
-      let inodeno = inode.no;
-      let inode = inode.inode.unwrap();
+    match str2u8(name) {
+      None => {
+        reply.error(ENOENT);
+      },
+      Some(name) => {
+        self.pool.execute(move || {
+          let txn = LOGGING.new_txn();
+          let mut pinode = ICACHE.get(parent as usize).unwrap().acquire();
+          let inode = pinode.dlookup(&txn, &name).unwrap().acquire();
+          let inodeno = inode.no;
+          let inode = inode.inode.unwrap();
 
-      let attr = FileAttr {
-        ino: inodeno as u64,
-        size: inode.size as u64,
-        blocks: 1,
-        atime: DEFAULT_TIME,
-        mtime: DEFAULT_TIME,
-        ctime: DEFAULT_TIME,
-        crtime: DEFAULT_TIME,
-        kind: get_kind(&inode),
-        perm: get_perm(&inode),
-        nlink: inode.nlink as u32,
-        uid: 0,
-        gid: 0,
-        rdev: 0,
-        flags: 0,
-      };
-    });
+          let attr = FileAttr {
+            ino: inodeno as u64,
+            size: inode.size as u64,
+            blocks: 1,
+            atime: DEFAULT_TIME,
+            mtime: DEFAULT_TIME,
+            ctime: DEFAULT_TIME,
+            crtime: DEFAULT_TIME,
+            kind: get_kind(&inode),
+            perm: get_perm(&inode),
+            nlink: inode.nlink as u32,
+            uid: 0,
+            gid: 0,
+            rdev: 0,
+            flags: 0,
+          };
+
+          reply.entry(&TTL, &attr, 0);
+        });
+      }
+    }
   }
 }
 

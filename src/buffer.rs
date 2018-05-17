@@ -72,7 +72,7 @@ impl Cache {
     let mut cache = self.cache.lock().unwrap();
 
     buf = cache.get_mut(&blockno).map(|buf| {
-      UnlockedBuf::new(buf.clone(), buf.no)
+      buf.clone()
     });
     if buf.is_none() {
       if cache.len() >= self.capacity {
@@ -80,7 +80,7 @@ impl Cache {
 
         for (blockno2, buf2) in cache.iter() {
           if buf2.refcnt() == 0 {
-            if !buf2.lock().unwrap().flags.contains(BufFlags::DIRTY) {
+            if !buf2.acquire().flags.contains(BufFlags::DIRTY) {
               free_nos.push(*blockno2);
               if cache.len() - free_nos.len() < self.capacity {
                 break;
@@ -96,9 +96,9 @@ impl Cache {
         }
       }
 
-      let new_buf = Arc::new(Mutex::new(Buf::new()));
-      buf = Some(UnlockedBuf::new(new_buf.clone(), blockno));
-      cache.insert(blockno, UnlockedBuf::new(new_buf.clone(), blockno));
+      let new_buf = Arc::new((Mutex::new(Buf::new()), blockno));
+      buf = Some(UnlockedBuf::new(new_buf.clone()));
+      cache.insert(blockno, UnlockedBuf::new(new_buf.clone()));
     }
     buf
   }

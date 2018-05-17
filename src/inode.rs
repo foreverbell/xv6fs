@@ -289,7 +289,7 @@ impl Cache {
     let mut cache = self.cache.lock().unwrap();
 
     inode = cache.get_mut(&inodeno).map(|inode| {
-      UnlockedInode::new(inode.clone(), inode.no)
+      inode.clone()
     });
     if inode.is_none() {
       if cache.len() >= self.capacity {
@@ -308,9 +308,9 @@ impl Cache {
         }
       }
 
-      let new_inode = Arc::new(Mutex::new(Inode::new(inodeno)));
-      inode = Some(UnlockedInode::new(new_inode.clone(), inodeno));
-      cache.insert(inodeno, UnlockedInode::new(new_inode.clone(), inodeno));
+      let new_inode = Arc::new((Mutex::new(Inode::new(inodeno)), inodeno));
+      inode = Some(UnlockedInode::new(new_inode.clone()));
+      cache.insert(inodeno, UnlockedInode::new(new_inode.clone()));
     }
     inode
   }
