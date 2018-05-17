@@ -5,6 +5,7 @@ use std::mem::size_of;
 use std::sync::{Mutex, Condvar};
 
 // TODO: failpoint testing.
+// https://github.com/pingcap/fail-rs
 
 // We define LOGSIZE as 64 in fs.rs, thus allow maximum 4
 // concurrent txns.

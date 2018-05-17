@@ -50,3 +50,29 @@ impl Bitmap {
     txn.write(&mut block);
   }
 }
+
+#[cfg(test)]
+mod test {
+  #[test]
+  fn test() {
+    use bitmap::Bitmap;
+    use buffer::BCACHE;
+    use disk::DISK;
+    use logging::LOGGING;
+    use testfs;
+
+    #[test]
+    fn test() {
+      let (disk, nfree) = testfs::test::create();
+      DISK.lock().unwrap().mount(disk);
+      BCACHE.init();
+
+      let txn = LOGGING.new_txn();
+      for i in 0..30 {
+        assert!(Bitmap::alloc(&txn) == nfree + i);
+      }
+      Bitmap::free(&txn, nfree + 10);
+      assert!(Bitmap::alloc(&txn) == nfree + 10);
+    }
+  }
+}

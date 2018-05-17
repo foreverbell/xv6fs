@@ -57,11 +57,6 @@ impl Cache {
   }
 
   #[cfg(test)]
-  pub fn capacity(&self) -> usize {
-    self.capacity
-  }
-
-  #[cfg(test)]
   pub fn nitems(&self) -> usize {
     self.cache.lock().unwrap().len()
   }
