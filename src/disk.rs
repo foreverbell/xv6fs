@@ -123,9 +123,12 @@ impl DiskService {
 
     let (send, recv) = mpsc::channel();
 
-    self.channel.as_ref().unwrap().send(
-      Request::Exit { reply: send },
-    ).unwrap();
+    self
+      .channel
+      .as_ref()
+      .unwrap()
+      .send(Request::Exit { reply: send })
+      .unwrap();
     let disk = recv.recv().unwrap();
     self.channel = None;
     disk
@@ -136,10 +139,15 @@ impl DiskService {
 
     let (send, recv) = mpsc::channel();
 
-    self.channel.as_ref().unwrap().send(Request::Read {
-      reply: send,
-      blockno: blockno,
-    }).unwrap();
+    self
+      .channel
+      .as_ref()
+      .unwrap()
+      .send(Request::Read {
+        reply: send,
+        blockno: blockno,
+      })
+      .unwrap();
     recv.recv().unwrap()
   }
 
@@ -148,11 +156,16 @@ impl DiskService {
 
     let (send, recv) = mpsc::channel();
 
-    self.channel.as_ref().unwrap().send(Request::Write {
-      reply: send,
-      blockno: blockno,
-      data: *data,
-    }).unwrap();
+    self
+      .channel
+      .as_ref()
+      .unwrap()
+      .send(Request::Write {
+        reply: send,
+        blockno: blockno,
+        data: *data,
+      })
+      .unwrap();
     recv.recv().unwrap()
   }
 }

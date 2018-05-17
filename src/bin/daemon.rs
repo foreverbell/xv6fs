@@ -181,16 +181,67 @@ impl Filesystem for Xv6FS {
     });
   }
 
-  // postpone
   fn mkdir(
     &mut self,
     _req: &Request,
-    _parent: u64,
-    _name: &OsStr,
+    parent: u64,
+    name: &OsStr,
     _mode: u32,
-    _reply: ReplyEntry,
+    reply: ReplyEntry,
   ) {
-    unimplemented!();
+    info!("[mkdir] parent={} name={:?}", parent, name);
+
+    let name = str2u8(name);
+    if name.is_none() {
+      reply.error(ENOENT);
+      return;
+    }
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+
+      if pinode.as_directory().lookup(&txn, &name.unwrap()).is_some() {
+        reply.error(EEXIST);
+        return;
+      }
+
+      let inode = ICACHE.alloc(&txn, fs::FileType::Directory).unwrap();
+      let mut dinode = ICACHE.lock(&txn, &inode);
+
+      dinode.inode.as_mut().unwrap().nlink = 1;
+      dinode.update(&txn);
+
+      assert!(dinode.as_directory().link(
+        &txn,
+        &str2u8(OsStr::new(".")).unwrap(),
+        inode.no() as u16,
+      ));
+      assert!(dinode.as_directory().link(
+        &txn,
+        &str2u8(OsStr::new("..")).unwrap(),
+        pinode.no as u16,
+      ));
+
+      let dinode = dinode.inode.as_ref().unwrap().clone();
+
+      assert!(pinode.as_directory().link(
+        &txn,
+        &name.unwrap(),
+        inode.no() as u16,
+      ));
+
+      pinode.inode.as_mut().unwrap().nlink += 1; // for `..`
+      pinode.update(&txn);
+
+      let attr = create_attr(
+        inode.disassemble() as u64,
+        dinode.size as u64,
+        get_kind(&dinode),
+        get_perm(&dinode),
+        dinode.nlink as u32,
+      );
+      reply.entry(&TTL, &attr, 0);
+    });
   }
 
   // postpone
@@ -371,16 +422,11 @@ impl Filesystem for Xv6FS {
 
           let dinode = dinode.inode.as_ref().unwrap().clone();
 
-          if !pinode.as_directory().link(
+          assert!(pinode.as_directory().link(
             &txn,
             &name.unwrap(),
             inode.no() as u16,
-          )
-          {
-            error!("unable to link inode {} in parent {}", inode.no(), parent);
-            reply.error(EIO);
-            return;
-          }
+          ));
 
           let attr = create_attr(
             inode.disassemble() as u64,
