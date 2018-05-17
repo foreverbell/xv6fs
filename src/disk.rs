@@ -47,6 +47,10 @@ impl Disk {
     Disk { blocks }
   }
 
+  pub fn from(blocks: Vec<Block>) -> Self {
+    Disk { blocks }
+  }
+
   pub fn load<P: AsRef<Path>>(path: P) -> Option<Self> {
     let mut f = File::open(path).unwrap();
     let size = f.metadata().unwrap().len() as usize;

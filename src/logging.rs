@@ -216,3 +216,49 @@ impl<'a> Drop for Transaction<'a> {
     self.end_txn()
   }
 }
+
+#[cfg(test)]
+mod test {
+  use buffer::BCACHE;
+  use disk::DISK;
+  use logging::LOGGING;
+  use testfs;
+
+  #[test]
+  fn test() {
+    let (disk, nfree) = testfs::test::create();
+    DISK.lock().unwrap().mount(disk);
+    BCACHE.init();
+
+    {
+      let txn = LOGGING.new_txn();
+
+      let mut buf1 = txn.read(nfree).unwrap();
+      buf1.data[0] = 42;
+      txn.write(&mut buf1);
+
+      let mut buf2 = txn.read(nfree + 1).unwrap();
+      buf2.data[0] = 100;
+      txn.write(&mut buf2);
+
+      assert!(BCACHE.nitems() == 2);
+      assert!(LOGGING.state.lock().unwrap().outstanding == 1);
+      assert!(LOGGING.lh.lock().unwrap().n == 2);
+    }
+
+    BCACHE.init();
+    assert!(BCACHE.nitems() == 0);
+    assert!(LOGGING.state.lock().unwrap().outstanding == 0);
+    assert!(LOGGING.lh.lock().unwrap().n == 0);
+
+    {
+      let txn = LOGGING.new_txn();
+
+      let buf1 = txn.read(nfree).unwrap();
+      assert!(buf1.data[0] == 42);
+
+      let buf2 = txn.read(nfree + 1).unwrap();
+      assert!(buf2.data[0] == 100);
+    }
+  }
+}

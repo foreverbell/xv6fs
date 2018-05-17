@@ -20,7 +20,7 @@ use time::Timespec;
 use xv6fs::disk::{BSIZE, DISK, Disk};
 use xv6fs::fs::{DIRSIZE, DiskInode, ROOTINO};
 use xv6fs::fs;
-use xv6fs::inode::{ICACHE, Inode, UnlockedInode};
+use xv6fs::inode::{ICACHE, UnlockedInode};
 use xv6fs::logging::LOGGING;
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
@@ -109,7 +109,7 @@ impl Xv6FS {
 impl Filesystem for Xv6FS {
   fn lookup(
     &mut self,
-    req: &Request,
+    _req: &Request,
     parent: u64,
     name: &OsStr,
     reply: ReplyEntry,
@@ -183,7 +183,7 @@ impl Filesystem for Xv6FS {
     _parent: u64,
     _name: &OsStr,
     _mode: u32,
-    reply: ReplyEntry,
+    _reply: ReplyEntry,
   ) {
     unimplemented!();
   }
@@ -194,7 +194,7 @@ impl Filesystem for Xv6FS {
     _req: &Request,
     _parent: u64,
     _name: &OsStr,
-    reply: ReplyEmpty,
+    _reply: ReplyEmpty,
   ) {
     unimplemented!();
   }
@@ -205,7 +205,7 @@ impl Filesystem for Xv6FS {
     _req: &Request,
     _parent: u64,
     _name: &OsStr,
-    reply: ReplyEmpty,
+    _reply: ReplyEmpty,
   ) {
     unimplemented!();
   }
@@ -218,7 +218,7 @@ impl Filesystem for Xv6FS {
     _name: &OsStr,
     _newparent: u64,
     _newname: &OsStr,
-    reply: ReplyEmpty,
+    _reply: ReplyEmpty,
   ) {
     unimplemented!();
   }
