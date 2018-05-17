@@ -71,9 +71,7 @@ impl Cache {
     let mut buf: Option<UnlockedBuf>;
     let mut cache = self.cache.lock().unwrap();
 
-    buf = cache.get_mut(&blockno).map(|buf| {
-      buf.clone()
-    });
+    buf = cache.get_mut(&blockno).map(|buf| buf.clone());
     if buf.is_none() {
       if cache.len() >= self.capacity {
         let mut free_nos = vec![];

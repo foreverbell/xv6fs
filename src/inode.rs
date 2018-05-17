@@ -288,9 +288,7 @@ impl Cache {
     let mut inode: Option<UnlockedInode>;
     let mut cache = self.cache.lock().unwrap();
 
-    inode = cache.get_mut(&inodeno).map(|inode| {
-      inode.clone()
-    });
+    inode = cache.get_mut(&inodeno).map(|inode| inode.clone());
     if inode.is_none() {
       if cache.len() >= self.capacity {
         let mut free_nos = vec![];

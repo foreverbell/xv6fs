@@ -53,6 +53,8 @@ impl<T: Sized, U: Copy> UnlockedItem<T, U> {
     Arc::strong_count(&self.x) - 1
   }
 
+  // Consumes self and returns a raw pointer.
+  // One must call assemble later to prevent memory leak.
   pub fn disassemble(self) -> *const (Mutex<T>, U) {
     Arc::into_raw(self.x.clone())
   }

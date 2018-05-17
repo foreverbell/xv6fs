@@ -4,9 +4,10 @@ version = "0.1.0"
 authors = ["foreverbell <dql.foreverbell@gmail.com>"]
 
 [dependencies]
-fuse = "0.3"
-libc = "*"
-time = "*"
-lazy_static = "1.0"
 bitflags = "1.0"
+env_logger = "0.5"
+fuse = "0.3"
+lazy_static = "1.0"
+libc = "*"
 threadpool = "1.7"
+time = "*"

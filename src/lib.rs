@@ -11,7 +11,7 @@ mod util;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
-mod disk;
+pub mod disk;
 
 #[allow(dead_code)]
 #[allow(unused_must_use)]
