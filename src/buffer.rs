@@ -30,7 +30,7 @@ lazy_static! {
   // Block 1 is immutable after file system is created, so we can safely
   // store it here.
   static ref SB: SuperBlock = from_block!(
-    &DISK.lock().unwrap().read(1), SuperBlock
+    &DISK.read(1), SuperBlock
   );
 }
 
@@ -103,14 +103,14 @@ impl Cache {
     let mut buf = self.get(blockno)?.acquire();
 
     if !buf.flags.contains(BufFlags::VALID) {
-      buf.data = DISK.lock().unwrap().read(blockno);
+      buf.data = DISK.read(blockno);
       buf.flags.insert(BufFlags::VALID);
     }
     Some(buf)
   }
 
   pub fn write<'a>(&self, buf: &mut LockedBuf<'a>) {
-    DISK.lock().unwrap().write(buf.no, &buf.data);
+    DISK.write(buf.no(), &buf.data);
     buf.flags.remove(BufFlags::DIRTY);
   }
 
@@ -128,7 +128,7 @@ mod test {
   #[test]
   fn test1() {
     let disk = Disk::new(1024);
-    DISK.lock().unwrap().mount(disk);
+    DISK.mount(disk);
     BCACHE.init();
 
     for i in 0..256 {
@@ -144,7 +144,7 @@ mod test {
   #[test]
   fn test2() {
     let disk = Disk::new(1024);
-    DISK.lock().unwrap().mount(disk);
+    DISK.mount(disk);
     BCACHE.init();
 
     for i in 0..256 {
@@ -162,7 +162,7 @@ mod test {
   #[test]
   fn test3() {
     let disk = Disk::new(1024);
-    DISK.lock().unwrap().mount(disk);
+    DISK.mount(disk);
     BCACHE.init();
 
     let mut vec = vec![];
@@ -182,7 +182,7 @@ mod test {
   #[test]
   fn test4() {
     let disk = Disk::new(1024);
-    DISK.lock().unwrap().mount(disk);
+    DISK.mount(disk);
     BCACHE.init();
 
     {

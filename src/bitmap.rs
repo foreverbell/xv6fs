@@ -64,7 +64,7 @@ mod test {
     #[test]
     fn test() {
       let (disk, nfree) = testfs::test::create();
-      DISK.lock().unwrap().mount(disk);
+      DISK.mount(disk);
       BCACHE.init();
 
       let txn = LOGGING.new_txn();

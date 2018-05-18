@@ -196,7 +196,7 @@ impl<'a> Transaction<'a> {
 
     let mut lh_index = None;
     for i in 0..(lh.n as usize) {
-      if lh.blocks[i] as usize == buf.no {
+      if lh.blocks[i] as usize == buf.no() {
         lh_index = Some(i);
         break;
       }
@@ -205,7 +205,7 @@ impl<'a> Transaction<'a> {
       lh_index = Some(lh.n as usize);
       lh.n += 1;
     }
-    lh.blocks[lh_index.unwrap()] = buf.no as u32;
+    lh.blocks[lh_index.unwrap()] = buf.no() as u32;
 
     // Pin this buffer in cache to avoid being evicted.
     BCACHE.pin(buf);
@@ -228,7 +228,7 @@ mod test {
   #[test]
   fn test() {
     let (disk, nfree) = testfs::test::create();
-    DISK.lock().unwrap().mount(disk);
+    DISK.mount(disk);
     BCACHE.init();
 
     {

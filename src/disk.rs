@@ -27,14 +27,13 @@ enum Request {
 }
 
 pub struct DiskService {
-  channel: Option<mpsc::Sender<Request>>,
+  channel: Mutex<Option<mpsc::Sender<Request>>>,
 }
 
 lazy_static! {
-  // TODO: delegate the mutex to channel.
-  pub static ref DISK: Mutex<DiskService> = Mutex::new(DiskService {
-    channel: None
-  });
+  pub static ref DISK: DiskService = DiskService {
+    channel: Mutex::new(None)
+  };
 }
 
 impl Disk {
@@ -84,13 +83,16 @@ impl Disk {
 }
 
 impl DiskService {
-  pub fn mount(&mut self, mut disk: Disk) {
-    if self.channel.is_some() {
+  pub fn mount(&self, mut disk: Disk) {
+    let mut channel = self.channel.lock().unwrap();
+    if channel.is_some() {
+      drop(channel);
       self.unmount();
+      return self.mount(disk);
     }
 
     let (send, recv) = mpsc::channel();
-    self.channel = Some(send.clone());
+    *channel = Some(send.clone());
     thread::spawn(move || loop {
       let m = recv.recv();
 
@@ -118,29 +120,29 @@ impl DiskService {
     });
   }
 
-  pub fn unmount(&mut self) -> Disk {
-    assert!(self.channel.is_some());
+  pub fn unmount(&self) -> Disk {
+    let mut channel = self.channel.lock().unwrap();
+    assert!(channel.is_some());
 
     let (send, recv) = mpsc::channel();
 
-    self
-      .channel
+    channel
       .as_ref()
       .unwrap()
       .send(Request::Exit { reply: send })
       .unwrap();
     let disk = recv.recv().unwrap();
-    self.channel = None;
+    *channel = None;
     disk
   }
 
-  pub fn read(&mut self, blockno: usize) -> Block {
-    assert!(self.channel.is_some());
+  pub fn read(&self, blockno: usize) -> Block {
+    let channel = self.channel.lock().unwrap();
+    assert!(channel.is_some());
 
     let (send, recv) = mpsc::channel();
 
-    self
-      .channel
+    channel
       .as_ref()
       .unwrap()
       .send(Request::Read {
@@ -151,13 +153,13 @@ impl DiskService {
     recv.recv().unwrap()
   }
 
-  pub fn write(&mut self, blockno: usize, data: &Block) {
-    assert!(self.channel.is_some());
+  pub fn write(&self, blockno: usize, data: &Block) {
+    let channel = self.channel.lock().unwrap();
+    assert!(channel.is_some());
 
     let (send, recv) = mpsc::channel();
 
-    self
-      .channel
+    channel
       .as_ref()
       .unwrap()
       .send(Request::Write {
@@ -177,14 +179,13 @@ mod test {
   #[test]
   fn test() {
     let disk = Disk::new(2);
-    let mut serv = DISK.lock().unwrap();
 
-    serv.mount(disk);
+    DISK.mount(disk);
 
     let blk1: Block = [42; BSIZE];
-    serv.write(1, &blk1);
+    DISK.write(1, &blk1);
 
-    assert!(serv.read(0)[0] == 0);
-    assert!(serv.read(1)[0] == 42);
+    assert!(DISK.read(0)[0] == 0);
+    assert!(DISK.read(1)[0] == 42);
   }
 }

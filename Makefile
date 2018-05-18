@@ -14,7 +14,7 @@ fs.img: target/debug/mkfs
 
 run: fs.img target/debug/daemon
 	mkdir mount
-	target/debug/daemon mount fs.img
+	RUST_LOG=info target/debug/daemon mount fs.img
 
 stop:
 	(fusermount -u mount) &

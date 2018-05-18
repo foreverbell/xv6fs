@@ -7,12 +7,26 @@ use logging::Transaction;
 use std::cmp::min;
 use std::collections::HashMap;
 use std::mem::{transmute, size_of};
+use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use util::locked::{LockedItem, UnlockedItem, UnlockedDrop};
 
 pub struct Inode {
-  pub inode: Option<DiskInode>,
-  pub no: usize,
+  inode: Option<DiskInode>,
+  no: usize,
+}
+
+impl Deref for Inode {
+  type Target = DiskInode;
+  fn deref(&self) -> &DiskInode {
+    self.inode.as_ref().unwrap()
+  }
+}
+
+impl DerefMut for Inode {
+  fn deref_mut(&mut self) -> &mut DiskInode {
+    self.inode.as_mut().unwrap()
+  }
 }
 
 pub struct Directory<'a> {
@@ -165,16 +179,15 @@ impl Inode {
 }
 
 impl<'a> Directory<'a> {
-  fn inode(&self) -> DiskInode {
-    self.inode.inode.as_ref().unwrap().clone()
+  fn inode(&self) -> &DiskInode {
+    self.inode.inode.as_ref().unwrap()
   }
 
   pub fn enumerate<'b>(
     &mut self,
     txn: &Transaction<'b>,
   ) -> Vec<(UnlockedInode, [u8; DIRSIZE])> {
-    let inode = self.inode();
-    let nentries = inode.size as usize / size_of::<Dirent>();
+    let nentries = self.inode().size as usize / size_of::<Dirent>();
     let mut result = vec![];
     let mut cur_index = 0;
 
@@ -206,8 +219,7 @@ impl<'a> Directory<'a> {
     txn: &Transaction<'b>,
     name: &[u8; DIRSIZE],
   ) -> Option<UnlockedInode> {
-    let inode = self.inode();
-    let nentries = inode.size as usize / size_of::<Dirent>();
+    let nentries = self.inode().size as usize / size_of::<Dirent>();
     let mut cur_index = 0;
 
     while cur_index < nentries {
@@ -242,8 +254,7 @@ impl<'a> Directory<'a> {
       return false;
     }
 
-    let inode = self.inode();
-    let nentries = inode.size as usize / size_of::<Dirent>();
+    let nentries = self.inode().size as usize / size_of::<Dirent>();
     let mut cur_index = 0;
 
     while cur_index < nentries {

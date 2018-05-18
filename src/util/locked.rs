@@ -22,7 +22,7 @@ pub struct UnlockedItem<T: Sized, U: Copy> {
 
 pub struct LockedItem<'a, T: 'a + Sized, U: Copy> {
   x: MutexGuard<'a, T>,
-  pub no: U,
+  no: U,
 
   ptr: Option<*const (Mutex<T>, U)>,
 }
@@ -65,6 +65,10 @@ impl<T: Sized, U: Copy> UnlockedItem<T, U> {
 }
 
 impl<'a, T: Sized, U: Copy> LockedItem<'a, T, U> {
+  pub fn no(&self) -> U {
+    self.no
+  }
+
   pub fn release(mut self) -> UnlockedItem<T, U> {
     let x = unsafe { Arc::from_raw(self.ptr.unwrap()) };
     self.ptr = None;
