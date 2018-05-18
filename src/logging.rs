@@ -27,6 +27,7 @@ pub struct Logging {
 // TODO: nested transaction.
 pub struct Transaction<'a> {
   logging: &'a Logging,
+  nested: bool,
 }
 
 lazy_static! {
@@ -116,7 +117,13 @@ impl Logging {
   }
 
   pub fn new_txn<'a>(&'a self) -> Transaction<'a> {
-    let txn = Transaction::new(self);
+    let txn = Transaction::new(self, false);
+    txn.begin_txn();
+    txn
+  }
+
+  pub fn new_nested_txn<'a>(&'a self) -> Transaction<'a> {
+    let txn = Transaction::new(self, true);
     txn.begin_txn();
     txn
   }
@@ -125,13 +132,17 @@ impl Logging {
 // RAII transaction, which acts as a proxy for block cache read and
 // write.
 impl<'a> Transaction<'a> {
-  fn new(logging: &'a Logging) -> Self {
-    Transaction { logging }
+  fn new(logging: &'a Logging, nested: bool) -> Self {
+    Transaction { logging, nested }
   }
 
   fn begin_txn(&self) {
     let mut state = self.logging.state.lock().unwrap();
 
+    if self.nested {
+      assert!(!state.committing);
+      return;
+    }
     loop {
       if state.committing {
         state = self.logging.condvar.wait(state).unwrap();
@@ -151,7 +162,9 @@ impl<'a> Transaction<'a> {
     assert!(state.outstanding > 0);
     assert!(!state.committing);
 
-    state.outstanding -= 1;
+    if !self.nested {
+      state.outstanding -= 1;
+    }
 
     if state.outstanding == 0 {
       state.committing = true;

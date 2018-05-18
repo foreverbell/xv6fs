@@ -3,7 +3,7 @@ use buffer::BCACHE;
 use disk::BSIZE;
 use fs::{DiskInode, FileType, IPB, ROOTINO, NDIRECT, NINDIRECT, MAXFILESIZE,
          Dirent, DIRSIZE};
-use logging::Transaction;
+use logging::{LOGGING, Transaction};
 use std::cmp::min;
 use std::collections::HashMap;
 use std::mem::{transmute, size_of};
@@ -214,11 +214,15 @@ impl<'a> Directory<'a> {
     result
   }
 
+  pub fn is_empty<'b>(&mut self, txn: &Transaction<'b>) -> bool {
+    self.enumerate(txn).len() == 2
+  }
+
   pub fn lookup<'b>(
     &mut self,
     txn: &Transaction<'b>,
     name: &[u8; DIRSIZE],
-  ) -> Option<UnlockedInode> {
+  ) -> Option<(UnlockedInode, usize)> {
     let nentries = self.inode().size as usize / size_of::<Dirent>();
     let mut cur_index = 0;
 
@@ -234,7 +238,10 @@ impl<'a> Directory<'a> {
           unsafe { &*(buf.as_slice().as_ptr() as *const Dirent).add(i) };
 
         if ent.inum != 0 && ent.name == *name {
-          return ICACHE.get(ent.inum as usize);
+          return Some((
+            ICACHE.get(ent.inum as usize).unwrap(),
+            (cur_index + i) * size_of::<Dirent>(),
+          ));
         }
       }
       cur_index += m / size_of::<Dirent>();
@@ -412,6 +419,7 @@ impl Cache {
 
 impl UnlockedDrop for UnlockedInode {
   fn drop(&mut self) {
-    // Cache::put(self);
+    let txn = LOGGING.new_nested_txn();
+    ICACHE.put(&txn, self);
   }
 }

@@ -13,12 +13,12 @@ fs.img: target/debug/mkfs
 	target/debug/mkfs fs.img
 
 run: fs.img target/debug/daemon
-	mkdir mount
-	RUST_LOG=info target/debug/daemon mount fs.img
+	mkdir mnt
+	RUST_LOG=info target/debug/daemon mnt fs.img
 
 stop:
-	(fusermount -u mount) &
-	(rm -rf mount) &
+	(fusermount -u mnt) &
+	(rm -rf mnt) &
 
 test:
 	RUST_TEST_THREADS=1 cargo +nightly test

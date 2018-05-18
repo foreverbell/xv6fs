@@ -70,6 +70,7 @@ impl Disk {
   }
 
   pub fn save<P: AsRef<Path>>(_path: P) {
+    // TODO: save xv6fs disk image into host's disk.
     unimplemented!();
   }
 

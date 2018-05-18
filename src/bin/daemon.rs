@@ -1,8 +1,8 @@
-#[macro_use]
-extern crate log;
 extern crate env_logger;
 extern crate fuse;
 extern crate libc;
+#[macro_use]
+extern crate log;
 extern crate threadpool;
 extern crate time;
 extern crate xv6fs;
@@ -10,15 +10,16 @@ extern crate xv6fs;
 use fuse::{FileType, FileAttr, Filesystem, Request};
 use fuse::{ReplyEmpty, ReplyData, ReplyEntry, ReplyAttr, ReplyDirectory,
            ReplyCreate, ReplyWrite};
-use libc::{EEXIST, ENOENT, EIO};
+use libc::{EEXIST, ENOENT, EIO, EISDIR, ENOTDIR, ENOTEMPTY};
 use libc::{O_CREAT, O_EXCL};
 use std::env;
 use std::ffi::OsStr;
 use std::str::from_utf8;
+use std::mem::{size_of, transmute};
 use threadpool::ThreadPool;
 use time::Timespec;
 use xv6fs::disk::{BSIZE, DISK, Disk};
-use xv6fs::fs::{DIRSIZE, DiskInode, ROOTINO};
+use xv6fs::fs::{DIRSIZE, ROOTINO, Dirent, DiskInode};
 use xv6fs::fs;
 use xv6fs::inode::{ICACHE, UnlockedInode};
 use xv6fs::logging::LOGGING;
@@ -39,6 +40,17 @@ fn str2u8(s: &OsStr) -> Option<[u8; DIRSIZE]> {
     result[i] = s_bytes[i];
   }
   Some(result)
+}
+
+macro_rules! convert_name {
+  ($name:ident, $reply:ident) => ({
+    let name = str2u8($name);
+    if name.is_none() {
+      $reply.error(ENOENT);
+      return;
+    }
+    name.unwrap()
+  });
 }
 
 fn u82str(s_bytes: &[u8; DIRSIZE]) -> &OsStr {
@@ -89,8 +101,8 @@ fn create_attr(
     kind: kind,
     perm: perm,
     nlink: nlink,
-    uid: 501,
-    gid: 20,
+    uid: 1000,
+    gid: 1000,
     rdev: 0,
     flags: 0,
   }
@@ -116,16 +128,13 @@ impl Filesystem for Xv6FS {
   ) {
     info!("[lookup] parent={} name={:?}", parent, name);
 
-    let name = str2u8(name);
-    if name.is_none() {
-      reply.error(ENOENT);
-      return;
-    }
+    let name = convert_name!(name, reply);
+
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
       let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
-      let inode = match pinode.as_directory().lookup(&txn, &name.unwrap()) {
-        Some(inode) => inode,
+      let inode = match pinode.as_directory().lookup(&txn, &name) {
+        Some((inode, _)) => inode,
         None => {
           reply.error(ENOENT);
           return;
@@ -148,6 +157,8 @@ impl Filesystem for Xv6FS {
     info!("[forget] ino={} nlookup={}", ino, nlookup);
 
     if ino != ROOTINO as u64 {
+      // Create an outer txn for txns nested in `UnlockedInode::Drop`.
+      let _txn = LOGGING.new_txn();
       for i in 0..nlookup {
         let ino = UnlockedInode::assemble(ino as *const _);
 
@@ -176,6 +187,40 @@ impl Filesystem for Xv6FS {
     });
   }
 
+  fn setattr(
+    &mut self,
+    _req: &Request,
+    ino: u64,
+    _mode: Option<u32>,
+    _uid: Option<u32>,
+    _gid: Option<u32>,
+    _size: Option<u64>,
+    _atime: Option<Timespec>,
+    _mtime: Option<Timespec>,
+    _fh: Option<u64>,
+    _crtime: Option<Timespec>,
+    _chgtime: Option<Timespec>,
+    _bkuptime: Option<Timespec>,
+    _flags: Option<u32>,
+    reply: ReplyAttr,
+  ) {
+    info!("[setattr] ino={}", ino);
+
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let dinode = ICACHE.lock(&txn, &get_inode(ino));
+      let attr = create_attr(
+        ino,
+        dinode.size as u64,
+        get_kind(&dinode),
+        get_perm(&dinode),
+        dinode.nlink as u32,
+      );
+
+      reply.attr(&TTL, &attr);
+    });
+  }
+
   fn mkdir(
     &mut self,
     _req: &Request,
@@ -186,16 +231,13 @@ impl Filesystem for Xv6FS {
   ) {
     info!("[mkdir] parent={} name={:?}", parent, name);
 
-    let name = str2u8(name);
-    if name.is_none() {
-      reply.error(ENOENT);
-      return;
-    }
+    let name = convert_name!(name, reply);
+
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
       let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
 
-      if pinode.as_directory().lookup(&txn, &name.unwrap()).is_some() {
+      if pinode.as_directory().lookup(&txn, &name).is_some() {
         reply.error(EEXIST);
         return;
       }
@@ -218,11 +260,7 @@ impl Filesystem for Xv6FS {
         pinode.no() as u16,
       ));
 
-      assert!(pinode.as_directory().link(
-        &txn,
-        &name.unwrap(),
-        inodeno as u16,
-      ));
+      assert!(pinode.as_directory().link(&txn, &name, inodeno as u16));
 
       pinode.nlink += 1; // for `..`
       pinode.update(&txn);
@@ -238,38 +276,120 @@ impl Filesystem for Xv6FS {
     });
   }
 
-  // postpone
   fn unlink(
     &mut self,
     _req: &Request,
-    _parent: u64,
-    _name: &OsStr,
-    _reply: ReplyEmpty,
+    parent: u64,
+    name: &OsStr,
+    reply: ReplyEmpty,
   ) {
-    unimplemented!();
+    info!("[unlink] parent={} name={:?}", parent, name);
+
+    let name = convert_name!(name, reply);
+
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+
+      match pinode.as_directory().lookup(&txn, &name) {
+        Some((inode, offset)) => {
+          let mut dinode = ICACHE.lock(&txn, &inode);
+
+          if dinode.file_type != fs::FileType::File {
+            reply.error(EISDIR);
+            return;
+          }
+          dinode.nlink -= 1;
+          dinode.update(&txn);
+          pinode.write(&txn, offset, unsafe {
+            &transmute::<_, [u8; size_of::<Dirent>()]>(Dirent {
+              inum: 0,
+              name: [0; DIRSIZE],
+            })
+          });
+
+          reply.ok();
+        },
+        None => {
+          reply.error(ENOENT);
+        },
+      }
+    });
   }
 
-  // postpone
   fn rmdir(
     &mut self,
     _req: &Request,
-    _parent: u64,
-    _name: &OsStr,
-    _reply: ReplyEmpty,
+    parent: u64,
+    name: &OsStr,
+    reply: ReplyEmpty,
   ) {
-    unimplemented!();
+    info!("[rmdir] parent={} name={:?}", parent, name);
+
+    if name == "." || name == ".." {
+      reply.error(ENOENT);
+      return;
+    }
+    let name = convert_name!(name, reply);
+
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+
+      match pinode.as_directory().lookup(&txn, &name) {
+        Some((inode, offset)) => {
+          let mut dinode = ICACHE.lock(&txn, &inode);
+
+          if dinode.file_type != fs::FileType::Directory {
+            reply.error(ENOTDIR);
+            return;
+          }
+          if !dinode.as_directory().is_empty(&txn) {
+            reply.error(ENOTEMPTY);
+            return;
+          }
+
+          dinode.nlink -= 1;
+          dinode.update(&txn);
+
+          pinode.nlink -= 1;
+          pinode.update(&txn); // for `..`
+          pinode.write(&txn, offset, unsafe {
+            &transmute::<_, [u8; size_of::<Dirent>()]>(Dirent {
+              inum: 0,
+              name: [0; DIRSIZE],
+            })
+          });
+
+          reply.ok();
+        },
+        None => {
+          reply.error(ENOENT);
+        },
+      }
+    });
   }
 
-  // postpone
   fn rename(
     &mut self,
     _req: &Request,
-    _parent: u64,
-    _name: &OsStr,
-    _newparent: u64,
-    _newname: &OsStr,
-    _reply: ReplyEmpty,
+    parent: u64,
+    name: &OsStr,
+    newparent: u64,
+    newname: &OsStr,
+    reply: ReplyEmpty,
   ) {
+    info!(
+      "[rename] parent={} name={:?} newparent={} newname={:?}",
+      parent,
+      name,
+      newparent,
+      newname
+    );
+
+    let _name = convert_name!(name, reply);
+    let _newname = convert_name!(newname, reply);
+
     unimplemented!();
   }
 
@@ -374,19 +494,16 @@ impl Filesystem for Xv6FS {
   ) {
     info!("[create] parent={} name={:?} flags={}", parent, name, flags);
 
-    let name = str2u8(name);
-    if name.is_none() {
-      reply.error(ENOENT);
-      return;
-    }
+    let name = convert_name!(name, reply);
+
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
       let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
       let create_flag = flags & O_CREAT as u32 != 0;
       let exist_flag = flags & (O_CREAT | O_EXCL) as u32 != 0;
 
-      match pinode.as_directory().lookup(&txn, &name.unwrap()) {
-        Some(inode) => {
+      match pinode.as_directory().lookup(&txn, &name) {
+        Some((inode, _)) => {
           let dinode = ICACHE.lock(&txn, &inode);
 
           if exist_flag || dinode.file_type != fs::FileType::File {
@@ -413,11 +530,7 @@ impl Filesystem for Xv6FS {
           dinode.nlink = 1;
           dinode.update(&txn);
 
-          assert!(pinode.as_directory().link(
-            &txn,
-            &name.unwrap(),
-            inode.no() as u16,
-          ));
+          assert!(pinode.as_directory().link(&txn, &name, inode.no() as u16));
 
           let attr = create_attr(
             inode.disassemble() as u64,
