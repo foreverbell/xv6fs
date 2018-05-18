@@ -14,14 +14,15 @@ use libc::{EEXIST, ENOENT, EIO, EISDIR, ENOTDIR, ENOTEMPTY};
 use libc::{O_CREAT, O_EXCL};
 use std::env;
 use std::ffi::OsStr;
-use std::str::from_utf8;
 use std::mem::{size_of, transmute};
+use std::str::from_utf8;
+use std::sync::Mutex;
 use threadpool::ThreadPool;
 use time::Timespec;
 use xv6fs::disk::{BSIZE, DISK, Disk};
 use xv6fs::fs::{DIRSIZE, ROOTINO, Dirent, DiskInode};
 use xv6fs::fs;
-use xv6fs::inode::{ICACHE, UnlockedInode};
+use xv6fs::inode::{ICACHE, Inode, UnlockedInode};
 use xv6fs::logging::LOGGING;
 
 const TTL: Timespec = Timespec { sec: 1, nsec: 0 }; // 1 second
@@ -73,13 +74,37 @@ fn get_kind(inode: &DiskInode) -> FileType {
   }
 }
 
-fn get_inode(inode_ptr: u64) -> UnlockedInode {
-  if inode_ptr == ROOTINO as u64 {
-    return ICACHE.get(ROOTINO).unwrap();
-  } else {
-    let inode = UnlockedInode::assemble(inode_ptr as *const _);
-    inode.clone().disassemble();
-    inode
+#[derive(Clone, Copy)]
+enum FuseInode {
+  Ptr(*const (Mutex<Inode>, usize)),
+  Inum(usize),
+}
+
+impl FuseInode {
+  fn new(x: u64) -> Self {
+    if x % 2 == 1 {
+      FuseInode::Inum((x as usize + 1) / 2)
+    } else {
+      FuseInode::Ptr(x as *const _)
+    }
+  }
+
+  fn serialize(self) -> u64 {
+    match self {
+      FuseInode::Ptr(ptr) => ptr as u64,
+      FuseInode::Inum(inum) => inum as u64 * 2 - 1,
+    }
+  }
+
+  fn get(self) -> UnlockedInode {
+    match self {
+      FuseInode::Ptr(ptr) => {
+        let inode = UnlockedInode::assemble(ptr);
+        inode.clone().disassemble(); // disassemble again to retain a reference
+        inode
+      },
+      FuseInode::Inum(inum) => ICACHE.get(inum).unwrap()
+    }
   }
 }
 
@@ -132,7 +157,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
       let inode = match pinode.as_directory().lookup(&txn, &name) {
         Some((inode, _)) => inode,
         None => {
@@ -142,7 +167,7 @@ impl Filesystem for Xv6FS {
       };
       let dinode = ICACHE.lock(&txn, &inode);
       let attr = create_attr(
-        inode.disassemble() as u64,
+        FuseInode::Ptr(inode.disassemble()).serialize(),
         dinode.size as u64,
         get_kind(&dinode),
         get_perm(&dinode),
@@ -165,6 +190,9 @@ impl Filesystem for Xv6FS {
         if i == 0 {
           assert!(ino.refcnt() >= nlookup as usize);
         }
+        if i == nlookup - 1 {
+          info!("{} refcnt left", ino.refcnt() - 1);
+        }
       }
     }
   }
@@ -174,7 +202,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let dinode = ICACHE.lock(&txn, &get_inode(ino));
+      let dinode = ICACHE.lock(&txn, &FuseInode::new(ino).get());
       let attr = create_attr(
         ino,
         dinode.size as u64,
@@ -208,7 +236,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let dinode = ICACHE.lock(&txn, &get_inode(ino));
+      let dinode = ICACHE.lock(&txn, &FuseInode::new(ino).get());
       let attr = create_attr(
         ino,
         dinode.size as u64,
@@ -235,7 +263,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
 
       if pinode.as_directory().lookup(&txn, &name).is_some() {
         reply.error(EEXIST);
@@ -266,7 +294,7 @@ impl Filesystem for Xv6FS {
       pinode.update(&txn);
 
       let attr = create_attr(
-        inode.disassemble() as u64,
+        FuseInode::Ptr(inode.disassemble()).serialize(),
         dinode.size as u64,
         get_kind(&dinode),
         get_perm(&dinode),
@@ -289,7 +317,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
 
       match pinode.as_directory().lookup(&txn, &name) {
         Some((inode, offset)) => {
@@ -334,7 +362,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
 
       match pinode.as_directory().lookup(&txn, &name) {
         Some((inode, offset)) => {
@@ -407,7 +435,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut inode = ICACHE.lock(&txn, &get_inode(ino));
+      let mut inode = ICACHE.lock(&txn, &FuseInode::new(ino).get());
 
       match inode.read(&txn, offset as usize, size as usize) {
         None => {
@@ -437,7 +465,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut inode = ICACHE.lock(&txn, &get_inode(ino));
+      let mut inode = ICACHE.lock(&txn, &FuseInode::new(ino).get());
 
       match inode.write(&txn, offset as usize, &data) {
         None => reply.error(EIO),
@@ -465,14 +493,14 @@ impl Filesystem for Xv6FS {
       let ents: Vec<(UnlockedInode, [u8; DIRSIZE])>;
       let mut offset = 0;
       {
-        let mut inode = ICACHE.lock(&txn, &get_inode(ino));
+        let mut inode = ICACHE.lock(&txn, &FuseInode::new(ino).get());
         ents = inode.as_directory().enumerate(&txn);
       }
 
       for (inode, name) in ents {
         let dinode = ICACHE.lock(&txn, &inode);
         reply.add(
-          inode.disassemble() as u64,
+          FuseInode::Inum(inode.no()).serialize(),
           offset,
           get_kind(&dinode),
           u82str(&name),
@@ -498,7 +526,7 @@ impl Filesystem for Xv6FS {
 
     self.pool.execute(move || {
       let txn = LOGGING.new_txn();
-      let mut pinode = ICACHE.lock(&txn, &get_inode(parent));
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
       let create_flag = flags & O_CREAT as u32 != 0;
       let exist_flag = flags & (O_CREAT | O_EXCL) as u32 != 0;
 
@@ -511,7 +539,7 @@ impl Filesystem for Xv6FS {
             return;
           }
           let attr = create_attr(
-            inode.disassemble() as u64,
+            FuseInode::Ptr(inode.disassemble()).serialize(),
             dinode.size as u64,
             get_kind(&dinode),
             get_perm(&dinode),
@@ -533,7 +561,7 @@ impl Filesystem for Xv6FS {
           assert!(pinode.as_directory().link(&txn, &name, inode.no() as u16));
 
           let attr = create_attr(
-            inode.disassemble() as u64,
+            FuseInode::Ptr(inode.disassemble()).serialize(),
             dinode.size as u64,
             get_kind(&dinode),
             get_perm(&dinode),

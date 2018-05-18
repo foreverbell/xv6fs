@@ -50,6 +50,10 @@ impl Inode {
     Inode { inode: None, no }
   }
 
+  fn clear(&mut self) {
+    self.inode = None;
+  }
+
   pub fn as_directory<'a>(&'a mut self) -> Directory<'a> {
     assert!(
       self.inode.is_some() &&
@@ -95,6 +99,30 @@ impl Inode {
       txn.write(&mut buf);
     }
     None
+  }
+
+  pub fn clear_blocks<'a>(&mut self, txn: &Transaction<'a>) {
+    assert!(self.inode.is_some());
+    let inode = self.inode.as_mut().unwrap();
+
+    for i in 0..NDIRECT {
+      if inode.addrs[i] != 0 {
+        Bitmap::free(txn, inode.addrs[i] as usize);
+        inode.addrs[i] = 0;
+      }
+    }
+    if inode.addrs[NDIRECT] != 0 {
+      let mut buf = txn.read(inode.addrs[NDIRECT] as usize).unwrap();
+      let a: &mut [u32; NINDIRECT] = unsafe { transmute(&mut buf.data) };
+      for i in 0..NINDIRECT {
+        if a[i] != 0 {
+          Bitmap::free(txn, a[i] as usize);
+          a[i] = 0;
+        }
+      }
+      Bitmap::free(txn, inode.addrs[NDIRECT] as usize);
+      inode.addrs[NDIRECT] = 0;
+    }
   }
 
   pub fn read<'a>(
@@ -385,14 +413,19 @@ impl Cache {
   }
 
   fn put<'a>(&self, txn: &Transaction<'a>, inode: &UnlockedInode) {
-    if inode.refcnt() == 0 {
+    if inode.refcnt() != 1 {
       return;
     }
-    let inode = self.lock(txn, inode); // acquiring lock here is expensive?
-    if let Some(inode) = inode.inode.as_ref() {
-      if inode.nlink == 0 {
-        // truncate file
-      }
+    let mut inode = self.lock(txn, inode); // acquiring lock here is expensive?
+    if inode.nlink == 0 {
+      info!("[garbage] cleaning inode {}", inode.no());
+      // Issue: potential garbage may be left here if crash happens before put,
+      // which results in the following code unexecuted even in presence of
+      // crash recovery.
+      inode.clear_blocks(txn);
+      inode.file_type = FileType::None;
+      inode.update(txn);
+      inode.clear();
     }
   }
 

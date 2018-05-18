@@ -4,9 +4,6 @@
 ///
 /// Every `LockedItem` represents an exclusively locked item in this
 /// container. `UnlockedItem` is on the opposite.
-///
-/// Use `LockedItem::release` and `UnlockedItem::acquire` to convert
-/// between each other.
 
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -21,10 +18,10 @@ pub struct UnlockedItem<T: Sized, U: Copy> {
 }
 
 pub struct LockedItem<'a, T: 'a + Sized, U: Copy> {
-  x: MutexGuard<'a, T>,
+  x: Option<MutexGuard<'a, T>>,
   no: U,
 
-  ptr: Option<*const (Mutex<T>, U)>,
+  ptr: *const (Mutex<T>, U),
 }
 
 impl<T: Sized, U: Copy> UnlockedItem<T, U> {
@@ -40,8 +37,8 @@ impl<T: Sized, U: Copy> UnlockedItem<T, U> {
     unsafe {
       let ptr = Arc::into_raw(self.x.clone());
       LockedItem {
-        ptr: Some(ptr),
-        x: (*ptr).0.lock().unwrap(),
+        ptr: ptr,
+        x: Some((*ptr).0.lock().unwrap()),
         no: self.x.1,
       }
     }
@@ -67,14 +64,6 @@ impl<T: Sized, U: Copy> UnlockedItem<T, U> {
 impl<'a, T: Sized, U: Copy> LockedItem<'a, T, U> {
   pub fn no(&self) -> U {
     self.no
-  }
-
-  pub fn release(mut self) -> UnlockedItem<T, U> {
-    let x = unsafe { Arc::from_raw(self.ptr.unwrap()) };
-    self.ptr = None;
-    drop(self);
-
-    UnlockedItem::new(x)
   }
 }
 
@@ -102,22 +91,21 @@ impl<T: Sized, U: Copy> Drop for UnlockedItem<T, U> {
 impl<'a, T: Sized, U: Copy> Deref for LockedItem<'a, T, U> {
   type Target = T;
   fn deref(&self) -> &T {
-    &*self.x
+    &*self.x.as_ref().unwrap()
   }
 }
 
 impl<'a, T: Sized, U: Copy> DerefMut for LockedItem<'a, T, U> {
   fn deref_mut(&mut self) -> &mut T {
-    &mut *self.x
+    &mut *self.x.as_mut().unwrap()
   }
 }
 
 impl<'a, T: Sized, U: Copy> Drop for LockedItem<'a, T, U> {
   fn drop(&mut self) {
-    if let Some(ptr) = self.ptr {
-      unsafe {
-        let _un = UnlockedItem::new(Arc::from_raw(ptr));
-      }
+    unsafe {
+      self.x = None;  // unlock first
+      let _un = UnlockedItem::new(Arc::from_raw(self.ptr));
     }
   }
 }

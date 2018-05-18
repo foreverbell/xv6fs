@@ -14,7 +14,7 @@ fs.img: target/debug/mkfs
 
 run: fs.img target/debug/daemon
 	mkdir mnt
-	RUST_LOG=info target/debug/daemon mnt fs.img
+	RUST_BACKTRACE=1 RUST_LOG=info target/debug/daemon mnt fs.img
 
 stop:
 	(fusermount -u mnt) &
