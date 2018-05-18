@@ -14,6 +14,7 @@ impl Bitmap {
     txn.write(&mut block);
   }
 
+  // Allocate a new block and mark it used in block bitmap.
   pub fn alloc<'a>(txn: &Transaction<'a>) -> usize {
     let sb = BCACHE.sb();
     let nblocks = sb.nblocks as usize;
@@ -38,6 +39,7 @@ impl Bitmap {
     panic!("no free block");
   }
 
+  // Free a block.
   pub fn free<'a>(txn: &Transaction<'a>, blockno: usize) {
     let sb = BCACHE.sb();
     let mut block = txn.read(sb.bblock(blockno)).unwrap();

@@ -62,6 +62,7 @@ impl Inode {
     Directory { inode: self }
   }
 
+  // Update the disk copy of this inode.
   pub fn update<'a>(&self, txn: &Transaction<'a>) {
     assert!(self.inode.is_some());
     let sb = BCACHE.sb();
@@ -72,6 +73,7 @@ impl Inode {
     txn.write(&mut buf);
   }
 
+  // Return the blockno of this inode's nth block.
   pub fn nth_block<'a>(
     &mut self,
     txn: &Transaction<'a>,
@@ -101,7 +103,8 @@ impl Inode {
     None
   }
 
-  pub fn clear_blocks<'a>(&mut self, txn: &Transaction<'a>) {
+  // Free all blocks of this inode.
+  pub fn free_blocks<'a>(&mut self, txn: &Transaction<'a>) {
     assert!(self.inode.is_some());
     let inode = self.inode.as_mut().unwrap();
 
@@ -211,6 +214,7 @@ impl<'a> Directory<'a> {
     self.inode.inode.as_ref().unwrap()
   }
 
+  // Enumerate all entries of this folder. Return inode and file name.
   pub fn enumerate<'b>(
     &mut self,
     txn: &Transaction<'b>,
@@ -242,6 +246,7 @@ impl<'a> Directory<'a> {
     result
   }
 
+  // Return true if this directory is empty regardless `.` and `..`.
   pub fn is_empty<'b>(&mut self, txn: &Transaction<'b>) -> bool {
     self.enumerate(txn).len() == 2
   }
@@ -277,6 +282,7 @@ impl<'a> Directory<'a> {
     None
   }
 
+  // Link the file with inode number `inum` in this directory.
   pub fn link<'b>(
     &mut self,
     txn: &Transaction<'b>,
@@ -422,7 +428,7 @@ impl Cache {
       // Issue: potential garbage may be left here if crash happens before
       // put, which results in the following code unexecuted even in
       // presence of crash recovery.
-      inode.clear_blocks(txn);
+      inode.free_blocks(txn);
       inode.file_type = FileType::None;
       inode.update(txn);
       inode.clear();

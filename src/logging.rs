@@ -24,9 +24,12 @@ pub struct Logging {
   lh: Mutex<LogHeader>,
 }
 
-// TODO: nested transaction.
 pub struct Transaction<'a> {
   logging: &'a Logging,
+  // A transaction can be nested if it happens within another
+  // transaction, where the number of outstanding transactions
+  // will not be increased, so a commit will not happen when this
+  // transaction is terminated.
   nested: bool,
 }
 

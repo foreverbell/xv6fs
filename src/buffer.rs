@@ -134,7 +134,6 @@ mod test {
     for i in 0..256 {
       assert!(BCACHE.get(i).is_some());
     }
-    println!("{}", BCACHE.nitems());
     assert!(BCACHE.nitems() == 256);
     // A stale entry is evicted.
     assert!(BCACHE.get(300).is_some());
