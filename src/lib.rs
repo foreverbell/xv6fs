@@ -17,6 +17,5 @@ pub mod inode;
 pub mod logging;
 
 mod buffer;
-#[allow(dead_code)]
 mod bitmap;
 mod testfs;

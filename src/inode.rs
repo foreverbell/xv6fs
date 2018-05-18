@@ -419,9 +419,9 @@ impl Cache {
     let mut inode = self.lock(txn, inode); // acquiring lock here is expensive?
     if inode.nlink == 0 {
       info!("[garbage] cleaning inode {}", inode.no());
-      // Issue: potential garbage may be left here if crash happens before put,
-      // which results in the following code unexecuted even in presence of
-      // crash recovery.
+      // Issue: potential garbage may be left here if crash happens before
+      // put, which results in the following code unexecuted even in
+      // presence of crash recovery.
       inode.clear_blocks(txn);
       inode.file_type = FileType::None;
       inode.update(txn);

@@ -104,7 +104,7 @@ impl<'a, T: Sized, U: Copy> DerefMut for LockedItem<'a, T, U> {
 impl<'a, T: Sized, U: Copy> Drop for LockedItem<'a, T, U> {
   fn drop(&mut self) {
     unsafe {
-      self.x = None;  // unlock first
+      self.x = None; // unlock first
       let _un = UnlockedItem::new(Arc::from_raw(self.ptr));
     }
   }

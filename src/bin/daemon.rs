@@ -103,7 +103,7 @@ impl FuseInode {
         inode.clone().disassemble(); // disassemble again to retain a reference
         inode
       },
-      FuseInode::Inum(inum) => ICACHE.get(inum).unwrap()
+      FuseInode::Inum(inum) => ICACHE.get(inum).unwrap(),
     }
   }
 }
@@ -415,10 +415,36 @@ impl Filesystem for Xv6FS {
       newname
     );
 
-    let _name = convert_name!(name, reply);
-    let _newname = convert_name!(newname, reply);
+    let name = convert_name!(name, reply);
+    let newname = convert_name!(newname, reply);
 
-    unimplemented!();
+    self.pool.execute(move || {
+      let txn = LOGGING.new_txn();
+      let mut pinode = ICACHE.lock(&txn, &FuseInode::new(parent).get());
+
+      if pinode.as_directory().lookup(&txn, &newname).is_some() {
+        reply.error(EEXIST);
+        return;
+      }
+      match pinode.as_directory().lookup(&txn, &name) {
+        // Use `_inode` here to ensure it is destroyed before `txn`.
+        Some((_inode, offset)) => {
+          let mut data =
+            pinode.read(&txn, offset, size_of::<Dirent>()).unwrap();
+          let ent: *mut Dirent = &mut data[0] as *mut u8 as *mut _;
+
+          unsafe {
+            (*ent).name = newname;
+          }
+          pinode.write(&txn, offset, data.as_slice());
+          reply.ok()
+        },
+        None => {
+          reply.error(ENOENT);
+          return;
+        },
+      }
+    });
   }
 
   fn read(
