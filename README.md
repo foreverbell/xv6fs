@@ -17,21 +17,30 @@ Normally, a file system should be abstracted into these layers.
 * path resolution
 * file object / descriptor
 
-We use FUSE's low level API, which manages this last two layers conforming with
+We use FUSE's low level API, which manages these last two layers conforming with
 Unix. The remaining work is to implement the top five layers and cooperate
 them with FUSE interface.
 
 Notice: for convenience, we mock the disk with an array of contiguous 512 bytes
-in memory, with an interface providing atomic block read / write. This disk acts
-as a service running in a separated thread, and communicate with the file system
-in a go routine fashion (which should be similar to IDE interruption).
+in memory, with an interface providing synchronized atomic block read / write.
+This disk acts as a service running in a separated thread, and communicate with
+the file system in a Go routine fashion (which should be similar to IDE
+interruption implemented in xv6).
 
-## Build
+## Quick Start
 
-A nightly Rust compiler is required (known to compile with `rustc 1.27.0-nightly`).
+Preparations.
+
+* a nightly Rust compiler (known to compile with `rustc 1.27.0-nightly`).
+* libfuse-dev (ubuntu, find substitution for yourself if using other Linux distros).
 
 ```bash
 $ make run
+```
+
+Then we have a mounted file system at `./mnt/`.
+
+```bash
 $ cd mnt
 $ touch foobar
 ```
